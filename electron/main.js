@@ -171,6 +171,34 @@ app.whenReady().then(async () => {
         return null;
     });
 
+    ipcMain.handle('scan-directory', async (event, dirPath) => {
+        const fs = require('fs');
+        const pathModule = require('path');
+        try {
+            if (!dirPath || !fs.existsSync(dirPath)) return [];
+            const entries = fs.readdirSync(dirPath, { withFileTypes: true });
+            const files = [];
+            for (const entry of entries) {
+                if (entry.isFile() && !entry.name.startsWith('.')) {
+                    const fullPath = pathModule.join(dirPath, entry.name);
+                    try {
+                        const stat = fs.statSync(fullPath);
+                        files.push({
+                            name: entry.name,
+                            path: fullPath,
+                            size: stat.size,
+                            mtime: stat.mtimeMs,
+                        });
+                    } catch { /* skip unreadable files */ }
+                }
+            }
+            return files;
+        } catch (e) {
+            console.error('scan-directory error:', e);
+            return [];
+        }
+    });
+
     ipcMain.handle('get-downloads-path', async () => {
         try {
             return app.getPath('downloads');

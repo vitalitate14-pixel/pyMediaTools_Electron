@@ -57,6 +57,8 @@ jobs:
             dist-electron/*.dmg
             dist-electron/*.zip
             dist-electron/*.exe
+            dist-electron/*.blockmap
+            dist-electron/latest*.yml
 
   release:
     needs: build
@@ -68,6 +70,9 @@ jobs:
         with:
           path: dist
           merge-multiple: true
+
+      - name: List release files
+        run: ls -la dist/
 
       - uses: softprops/action-gh-release@v2
         with:
