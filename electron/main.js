@@ -114,7 +114,7 @@ function createWindow() {
             nodeIntegration: false,
             contextIsolation: true,
             sandbox: false,
-            webSecurity: true,  // 使用 local-media:// 自定义协议安全地加载本地媒体
+            webSecurity: false,  // 桌面应用需要加载 file:// 本地媒体预览
             preload: path.join(__dirname, 'preload.js')
         },
         titleBarStyle: 'hiddenInset',
