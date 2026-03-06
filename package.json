@@ -26,7 +26,8 @@
   "dependencies": {
     "archiver": "^7.0.1",
     "diff-match-patch": "^1.0.5",
-    "electron-store": "^8.1.0"
+    "electron-store": "^8.1.0",
+    "electron-updater": "^6.8.3"
   },
   "devDependencies": {
     "concurrently": "^8.2.2",
@@ -38,6 +39,13 @@
   "build": {
     "appId": "com.timcode.pymediatools",
     "productName": "pyMediaTools",
+    "publish": [
+      {
+        "provider": "github",
+        "owner": "secure-artifacts",
+        "repo": "pyMediaTools_Electron"
+      }
+    ],
     "directories": {
       "output": "dist-electron"
     },
@@ -75,6 +83,7 @@
     },
     "win": {
       "target": [
+        "nsis",
         "zip"
       ],
       "icon": "assets/icon.ico",

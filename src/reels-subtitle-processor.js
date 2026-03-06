@@ -337,7 +337,7 @@ function resegmentWordsByStyle(allWords, style, videoW) {
     };
 
     // 标点断句正则
-    const hardBreakRe = /[。！？!?；;：:]+$|[\"'"'）)】\]》》】」]$/;
+    const hardBreakRe = /[。！？!?；;：:]+$|[\"'\u201D\u2019）)】\]》」]$/;
     const gapThreshold = parseFloat(s.segment_gap_sec) || 0.45;
 
     function packEventWords(words) {

@@ -54,6 +54,9 @@ async function reelsWysiwygExport(params) {
         bgVolume = 0.1,
         loopFade = true,
         loopFadeDur = 1.0,
+        customDuration = 0,  // 自定义输出时长（秒），0 = 自动
+        bgmPath = '',        // 配乐文件路径
+        bgmVolume = 0.3,     // 配乐音量 (0~1)
         onProgress,
         onLog,
         isCancelled,
@@ -77,20 +80,25 @@ async function reelsWysiwygExport(params) {
     const ctx = canvas.getContext('2d');
     const renderer = new ReelsCanvasRenderer(canvas);
 
-    // 获取时长：优先音频，否则视频背景
+    // 获取时长：优先自定义时长，否则音频时长，否则视频背景时长
     let duration = 0;
-    if (voicePath) {
-        log('正在获取音频时长...');
-        duration = await window.electronAPI.getMediaDuration(voicePath);
-    }
-    if (!duration || duration <= 0) {
-        log('正在获取背景视频时长...');
-        duration = await window.electronAPI.getMediaDuration(backgroundPath);
-    }
-    if (!duration || duration <= 0) {
-        // 图片背景无音频时默认 5 秒
-        duration = 5;
-        log(`无法获取时长，使用默认 ${duration}s`);
+    if (customDuration > 0) {
+        duration = customDuration;
+        log(`使用自定义时长: ${duration}s`);
+    } else {
+        if (voicePath) {
+            log('正在获取音频时长...');
+            duration = await window.electronAPI.getMediaDuration(voicePath);
+        }
+        if (!duration || duration <= 0) {
+            log('正在获取背景视频时长...');
+            duration = await window.electronAPI.getMediaDuration(backgroundPath);
+        }
+        if (!duration || duration <= 0) {
+            // 图片背景无音频时默认 5 秒
+            duration = 5;
+            log(`无法获取时长，使用默认 ${duration}s`);
+        }
     }
     const totalFrames = Math.ceil(duration * fps);
     log(`时长: ${duration.toFixed(2)}s, 帧数: ${totalFrames}, FPS: ${fps}`);
@@ -130,6 +138,8 @@ async function reelsWysiwygExport(params) {
         bgVolume,
         backgroundPath,
         bgHasAudio: !_isImageFile(backgroundPath),
+        bgmPath: bgmPath || '',
+        bgmVolume: bgmVolume || 0,
     });
     if (!sessionId) throw new Error('FFmpeg 启动失败');
 

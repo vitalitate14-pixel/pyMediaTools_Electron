@@ -2623,7 +2623,7 @@
                         style="position: absolute; transform-origin: 0 0; will-change: transform;">
                         <div id="reels-preview-container"
                           style="position: relative; background: #000; overflow: hidden; aspect-ratio: 9/16; width: 270px; box-shadow: 0 0 30px rgba(0,0,0,1);">
-                          <video id="reels-preview-video"
+                          <video id="reels-preview-video" preload="auto" muted
                             style="width: 100%; height: 100%; object-fit: contain; display: none;"></video>
                           <audio id="reels-preview-audio" style="display:none;"></audio>
                           <canvas id="reels-preview-canvas"
@@ -2719,6 +2719,12 @@
                 <input type="number" id="reels-bg-volume" class="input input-small" min="0" max="200" step="1"
                   value="15" style="width:58px;font-size:11px;">
                 <span style="font-size:11px;color:var(--text-secondary);">%</span>
+                <label style="display:flex;align-items:center;gap:4px;">
+                  输出时长:
+                  <input type="number" id="reels-custom-duration" class="input input-small" min="0" max="600" step="0.5"
+                    value="" placeholder="自动" style="width:58px;font-size:11px;" title="留空=自动跟随音频/视频时长，输入数字=自定义秒数">
+                  <span style="font-size:11px;color:var(--text-secondary);">s</span>
+                </label>
                 <label style="display:flex;align-items:center;gap:3px;"><input type="checkbox" id="reels-use-gpu">
                   ⚡GPU</label>
                 <label style="display:flex;align-items:center;gap:3px;">
@@ -2799,10 +2805,18 @@
           <div class="form-section">
             <h3 class="section-title">关于</h3>
             <div class="about-info">
-              <p><strong>pyMediaTools Unified</strong> v2.0.0</p>
+              <p><strong>pyMediaTools Unified</strong> <span id="app-version-display">v2.0.0</span></p>
               <p>统一媒体工具包 - 整合字幕对齐、媒体转换、TTS等功能</p>
+              <div style="margin-top: 12px; display: flex; align-items: center; gap: 10px; flex-wrap: wrap;">
+                <button id="check-update-btn" class="btn btn-secondary" onclick="checkAppUpdate()"
+                  style="font-size: 12px; padding: 6px 14px;">🔄 检查更新</button>
+                <span id="update-status-text" style="font-size: 12px; color: var(--text-secondary);"></span>
+              </div>
+              <div id="update-progress-bar" class="progress-bar hidden" style="margin-top: 8px; height: 4px;">
+                <div id="update-progress-inner" class="progress-bar-inner" style="width: 0%;"></div>
+              </div>
               <p style="margin-top: 8px; color: var(--text-secondary);">
-                技术栈: Electron + Vite + Python Flask
+                技术栈: Electron + Vite
               </p>
             </div>
           </div>

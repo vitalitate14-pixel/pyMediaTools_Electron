@@ -30,13 +30,12 @@ const _reelsState = {
     overlaySelectedId: null,
     overlayDrag: null,        // { ovId, startX, startY, origX, origY, handle: null|'tl'|'tr'|'bl'|'br'|... }
     // AI watermarks
-    watermarks: [
-        { text: 'AI Generated', fontSize: 25, color: '#FFFFFF', textOpacity: 0.8, bgColor: '#000000', bgOpacity: 0.5, position: 'top-right', enabled: true },
-    ],
+    watermarks: [],
 };
 window._reelsState = _reelsState;
 
 const REELS_DEFAULT_PRESET_KEY = 'reels_default_preset_name';
+const REELS_WATERMARK_STORAGE_KEY = 'reels_watermarks';
 const REELS_BACKGROUND_EXTS = new Set(['mp4', 'mov', 'mkv', 'avi', 'wmv', 'flv', 'webm', 'jpg', 'jpeg', 'png', 'webp']);
 const REELS_AUDIO_EXTS = new Set(['mp3', 'wav', 'm4a', 'aac', 'flac', 'ogg']);
 const REELS_TXT_EXTS = new Set(['txt']);
@@ -176,9 +175,22 @@ function _initReelsModule() {
             if (video) video.pause();
             const fadeVideo = _reelsState.previewFadeVideo;
             if (fadeVideo) fadeVideo.pause();
+            // 同步暂停 BGM
+            const bgmAudio = _reelsState._bgmAudioEl;
+            if (bgmAudio) bgmAudio.pause();
             const btn = document.getElementById('reels-preview-play');
             if (btn) btn.textContent = '▶️';
         });
+    }
+
+    // ═══ 创建 BGM 音频元素（隐藏） ═══
+    if (!_reelsState._bgmAudioEl) {
+        const bgmEl = document.createElement('audio');
+        bgmEl.id = 'reels-preview-bgm';
+        bgmEl.style.display = 'none';
+        bgmEl.loop = true;  // BGM 循环播放
+        document.body.appendChild(bgmEl);
+        _reelsState._bgmAudioEl = bgmEl;
     }
 
     _reelsRefreshPresetList();
@@ -232,6 +244,7 @@ function _initReelsModule() {
                 addOverlay(ov) { mgr.addOverlay(ov); },
                 removeOverlay(id) { mgr.removeOverlay(id); },
                 getSelected() { return null; },
+                render() { /* rAF loop handles rendering */ },
                 // 回调占位
                 onSelect: null,
                 onDeselect: null,
@@ -1165,7 +1178,18 @@ function reelsUpdatePreview() {
     _syncBackgroundVideoToMaster();
 
     const video = document.getElementById('reels-preview-video');
-    if (video && video.readyState >= 2) {
+    // Check for image background
+    const bgImg = _reelsState._previewBgImage;
+    const hasBgImg = bgImg && bgImg.complete && bgImg.naturalWidth > 0;
+
+    // Debug: log video state periodically
+    if (video && video.src && !_reelsState._lastVideoDebugTime) _reelsState._lastVideoDebugTime = 0;
+    if (video && video.src && (Date.now() - (_reelsState._lastVideoDebugTime || 0)) > 3000) {
+        console.log('[Preview] video.src:', video.src?.substring(0, 80), 'readyState:', video.readyState, 'videoWidth:', video.videoWidth, 'error:', video.error?.message);
+        _reelsState._lastVideoDebugTime = Date.now();
+    }
+
+    if (video && video.src && video.readyState >= 1 && video.videoWidth > 0) {
         _drawVideoCover(ctx, video, w, h);
         const fadeFrame = _calcPreviewLoopFadeFrame();
         if (fadeFrame && fadeFrame.video && fadeFrame.video.readyState >= 2) {
@@ -1174,6 +1198,18 @@ function reelsUpdatePreview() {
             _drawVideoCover(ctx, fadeFrame.video, w, h);
             ctx.restore();
         }
+
+        // Draw global mask if enabled
+        if (style.global_mask_enabled) {
+            ctx.save();
+            ctx.globalAlpha = style.global_mask_opacity ?? 0.5;
+            ctx.fillStyle = style.global_mask_color || '#000000';
+            ctx.fillRect(0, 0, w, h);
+            ctx.restore();
+        }
+    } else if (hasBgImg) {
+        // Draw image background using cover mode
+        _drawVideoCover(ctx, bgImg, w, h);
 
         // Draw global mask if enabled
         if (style.global_mask_enabled) {
@@ -1332,21 +1368,51 @@ function _drawWatermarks(ctx, canvasW, canvasH) {
     }
 }
 
-// ═══════════════════════════════════════════════════════
-// AI 水印管理
-// ═══════════════════════════════════════════════════════
+const REELS_DEFAULT_WATERMARK = [
+    {
+        text: 'AI Generated', fontSize: 25, color: '#FFFFFF', textOpacity: 0.8,
+        bgColor: '#000000', bgOpacity: 0.5, position: 'top-right', enabled: true
+    },
+    {
+        text: 'Attribution to11.ai', fontSize: 20, color: '#FFFFFF', textOpacity: 1.0,
+        bgColor: '#000000', bgOpacity: 0.5, position: 'bottom-left', enabled: true
+    },
+];
+
+function _reelsSaveWatermarks() {
+    try {
+        localStorage.setItem(REELS_WATERMARK_STORAGE_KEY, JSON.stringify(_reelsState.watermarks));
+    } catch (e) { /* quota exceeded etc */ }
+}
+
+function _reelsLoadWatermarks() {
+    try {
+        const saved = localStorage.getItem(REELS_WATERMARK_STORAGE_KEY);
+        if (saved) {
+            const parsed = JSON.parse(saved);
+            if (Array.isArray(parsed)) {
+                _reelsState.watermarks = parsed;
+                return;
+            }
+        }
+    } catch (e) { /* parse error */ }
+    // No saved data — use default
+    _reelsState.watermarks = JSON.parse(JSON.stringify(REELS_DEFAULT_WATERMARK));
+}
 
 function reelsAddWatermark() {
     _reelsState.watermarks.push({
-        text: 'AI Generated', fontSize: 20, color: '#FFFFFF', textOpacity: 1.0,
-        bgColor: '#000000', bgOpacity: 0.5, position: 'top-right', enabled: true,
+        text: 'Attribution to11.ai', fontSize: 20, color: '#FFFFFF', textOpacity: 1.0,
+        bgColor: '#000000', bgOpacity: 0.5, position: 'bottom-left', enabled: true,
     });
     _reelsRefreshWatermarkUI();
+    _reelsSaveWatermarks();
 }
 
 function reelsRemoveWatermark(idx) {
     _reelsState.watermarks.splice(idx, 1);
     _reelsRefreshWatermarkUI();
+    _reelsSaveWatermarks();
 }
 
 function _reelsSyncWatermarkFromUI() {
@@ -1365,6 +1431,7 @@ function _reelsSyncWatermarkFromUI() {
         wm.position = row.querySelector('.wm-position')?.value || 'top-right';
         wm.enabled = row.querySelector('.wm-enabled')?.checked ?? true;
     });
+    _reelsSaveWatermarks();
 }
 
 function _reelsRefreshWatermarkUI() {
@@ -1394,15 +1461,18 @@ function _reelsRefreshWatermarkUI() {
     `).join('');
 }
 
-// 初始化水印 UI
+// 初始化水印 — 从 localStorage 恢复
 document.addEventListener('DOMContentLoaded', () => {
-    setTimeout(() => _reelsRefreshWatermarkUI(), 500);
+    setTimeout(() => {
+        _reelsLoadWatermarks();
+        _reelsRefreshWatermarkUI();
+    }, 500);
 });
 
 function _drawVideoCover(ctx, videoEl, targetW, targetH) {
     if (!ctx || !videoEl || !(targetW > 0) || !(targetH > 0)) return;
-    const srcW = videoEl.videoWidth || targetW;
-    const srcH = videoEl.videoHeight || targetH;
+    const srcW = videoEl.videoWidth || videoEl.naturalWidth || targetW;
+    const srcH = videoEl.videoHeight || videoEl.naturalHeight || targetH;
     if (!(srcW > 0) || !(srcH > 0)) {
         ctx.drawImage(videoEl, 0, 0, targetW, targetH);
         return;
@@ -1512,6 +1582,19 @@ function _applyPreviewAudioMix() {
             // 无配音时预览以背景原声为主，和旧导出行为一致。
             video.volume = 1.0;
             video.muted = false;
+        }
+    }
+
+    // ── BGM 音量 ──
+    const bgmAudio = _reelsState._bgmAudioEl;
+    if (bgmAudio) {
+        if (task && task.bgmPath && bgmAudio.src) {
+            const bgmVol = (task.bgmVolume != null ? task.bgmVolume : 30) / 100;
+            bgmAudio.volume = Math.max(0, Math.min(1, bgmVol));
+            bgmAudio.muted = bgmVol <= 0.001;
+        } else {
+            bgmAudio.volume = 0;
+            bgmAudio.muted = true;
         }
     }
 }
@@ -2026,7 +2109,10 @@ function _applyFreeBackgroundAssignment() {
     if (library.length === 0) return;
 
     const assignMode = _getBgAssignMode();
-    const targetTasks = _reelsState.tasks.filter(t => t.audioPath || t.srtPath);
+    // free 模式下，TXT/手动文本任务也需要拿到背景，便于点击预览
+    const targetTasks = _reelsState.tasks.filter(t =>
+        t.audioPath || t.srtPath || t.txtContent || t.manualText
+    );
     if (targetTasks.length === 0) return;
 
     if (assignMode === 'single') {
@@ -2047,6 +2133,21 @@ function _applyFreeBackgroundAssignment() {
         targetTasks[i].videoPath = bg.path;
         targetTasks[i].srcUrl = bg.srcUrl || null;
     }
+}
+
+function _ensurePreviewTaskForBackgroundOnlyInFreeMode() {
+    if (_getMatchMode() !== 'free') return;
+    if (_reelsState.tasks.length > 0) return;
+    const firstBg = (_reelsState.backgroundLibrary || [])[0];
+    if (!firstBg || !firstBg.path) return;
+
+    const task = _getOrCreateTaskByBase(firstBg.baseName || firstBg.name, firstBg.name || 'background.mp4');
+    task.baseName = firstBg.baseName || _normalizeBaseName(firstBg.name || firstBg.path);
+    task.fileName = firstBg.name || String(firstBg.path).split(/[\\/]/).pop() || 'background.mp4';
+    task.bgPath = firstBg.path;
+    task.bgSrcUrl = firstBg.srcUrl || null;
+    task.videoPath = firstBg.path;
+    task.srcUrl = firstBg.srcUrl || null;
 }
 
 function _ensureBackgroundLibraryFromTasks() {
@@ -2158,6 +2259,7 @@ function reelsAutoMatchFiles() {
         _pruneFreeBgOnlyTasks();
         _ensureBackgroundLibraryFromTasks();
         _applyFreeBackgroundAssignment();
+        _ensurePreviewTaskForBackgroundOnlyInFreeMode();
     }
 
     for (const task of _reelsState.tasks) {
@@ -2173,6 +2275,9 @@ function reelsAutoMatchFiles() {
         _reelsState.selectedIdx = _reelsState.tasks.length - 1;
     }
     _renderTaskList();
+    if (_reelsState.selectedIdx < 0 && _reelsState.tasks.length > 0) {
+        reelsSelectTask(0);
+    }
 }
 
 function reelsClearTasks() {
@@ -2180,6 +2285,36 @@ function reelsClearTasks() {
     _reelsState.selectedIdx = -1;
     _reelsState.pendingFiles = { backgrounds: [], audios: [], srts: [], txts: [] };
     _reelsState.backgroundLibrary = [];
+
+    // Clear overlay manager and panel
+    if (_reelsState.overlayProxy && _reelsState.overlayProxy.overlayMgr) {
+        _reelsState.overlayProxy.overlayMgr.overlays = [];
+    }
+    if (_reelsState.overlayPanel) {
+        _reelsState.overlayPanel.deselectOverlay();
+        _reelsState.overlayPanel._refreshList();
+    }
+
+    // Clear video/audio preview
+    _reelsState._previewBgImage = null;
+    const video = document.getElementById('reels-preview-video');
+    const audio = document.getElementById('reels-preview-audio');
+    const placeholder = document.getElementById('reels-preview-placeholder');
+    if (video) {
+        video.pause();
+        video.removeAttribute('src');
+        video.style.display = 'none';
+    }
+    if (audio) {
+        audio.pause();
+        audio.removeAttribute('src');
+    }
+    if (placeholder) {
+        placeholder.style.display = 'flex';
+        placeholder.textContent = '选择视频任务后可实时预览字幕效果';
+    }
+    _resetPreviewFadeVideo();
+
     _renderTaskList();
 }
 
@@ -2301,6 +2436,18 @@ function reelsSelectTask(idx) {
             audio.removeAttribute('src');
         }
     }
+
+    // ── 加载 BGM ──
+    const bgmAudio = _reelsState._bgmAudioEl;
+    if (bgmAudio) {
+        bgmAudio.pause();
+        if (task.bgmPath) {
+            const bgmUrl = _toPlayablePath(task.bgmPath, null);
+            if (bgmAudio.src !== bgmUrl) bgmAudio.src = bgmUrl;
+        } else {
+            bgmAudio.removeAttribute('src');
+        }
+    }
     _applyPreviewAudioMix();
 
     if (video && bgPath) {
@@ -2309,14 +2456,30 @@ function reelsSelectTask(idx) {
             video.removeAttribute('src');
             _resetPreviewFadeVideo();
             video.style.display = 'none';
+            // Load image background for canvas rendering
+            const imgUrl = _toPlayablePath(bgPath, bgSrc);
+            const img = new Image();
+            img.crossOrigin = 'anonymous';
+            img.onload = () => { _reelsState._previewBgImage = img; };
+            img.src = imgUrl;
+            _reelsState._previewBgImage = img;
             if (placeholder) {
-                placeholder.style.display = 'flex';
-                placeholder.textContent = '图片背景预览暂不支持，导出会正常使用该图片。';
+                placeholder.style.display = 'none';
             }
         } else {
+            _reelsState._previewBgImage = null; // Clear image bg
             const filePath = _toPlayablePath(bgPath, bgSrc);
-            if (video.src !== filePath) video.src = filePath;
+            // 总是重新设置 src（避免 URL 规范化导致比较失误）
+            video.pause();
+            video.src = filePath;
+            video.load();
             video.loop = !!voicePath;
+            // 强制加载第一帧 — seek 到 0.01s 触发帧数据加载
+            video.addEventListener('loadeddata', function _onLoaded() {
+                video.removeEventListener('loadeddata', _onLoaded);
+                console.log('[Preview] Video loadeddata, readyState:', video.readyState);
+            }, { once: true });
+            try { video.currentTime = 0.01; } catch (e) { }
             const fadeVideo = _ensurePreviewFadeVideo(video);
             if (fadeVideo) {
                 fadeVideo.pause();
@@ -2329,6 +2492,7 @@ function reelsSelectTask(idx) {
             }
         }
     } else if (video) {
+        _reelsState._previewBgImage = null; // Clear image bg
         video.pause();
         video.removeAttribute('src');
         _resetPreviewFadeVideo();
@@ -2350,11 +2514,49 @@ function reelsSelectTask(idx) {
 }
 
 function reelsRemoveTask(idx) {
+    if (idx < 0 || idx >= _reelsState.tasks.length) return;
+    const prevSelectedIdx = _reelsState.selectedIdx;
     _reelsState.tasks.splice(idx, 1);
-    if (_reelsState.selectedIdx >= _reelsState.tasks.length) {
-        _reelsState.selectedIdx = _reelsState.tasks.length - 1;
+
+    if (_reelsState.tasks.length === 0) {
+        _reelsState.selectedIdx = -1;
+        _renderTaskList();
+
+        _reelsState._previewBgImage = null;
+        const video = document.getElementById('reels-preview-video');
+        const audio = document.getElementById('reels-preview-audio');
+        const playBtn = document.getElementById('reels-preview-play');
+        const placeholder = document.getElementById('reels-preview-placeholder');
+        if (video) {
+            video.pause();
+            video.removeAttribute('src');
+            video.style.display = 'none';
+        }
+        if (audio) {
+            audio.pause();
+            audio.removeAttribute('src');
+        }
+        _resetPreviewFadeVideo();
+        if (placeholder) {
+            placeholder.style.display = 'flex';
+            placeholder.textContent = '选择任务以预览';
+        }
+        if (playBtn) playBtn.textContent = '▶️';
+        _updatePreviewTimeUI(0, 0);
+        return;
     }
-    _renderTaskList();
+
+    // 维护删除后的选中索引
+    let nextSelectedIdx = prevSelectedIdx;
+    if (prevSelectedIdx === idx) {
+        nextSelectedIdx = Math.min(idx, _reelsState.tasks.length - 1);
+    } else if (prevSelectedIdx > idx) {
+        nextSelectedIdx = prevSelectedIdx - 1;
+    }
+    _reelsState.selectedIdx = Math.max(0, Math.min(nextSelectedIdx, _reelsState.tasks.length - 1));
+
+    // 统一走选择逻辑，确保预览背景/音频/时间线同步
+    reelsSelectTask(_reelsState.selectedIdx);
 }
 
 // ═══════════════════════════════════════════════════════
@@ -2374,10 +2576,14 @@ function reelsTogglePlay() {
     const hasVideo = !!(video && video.src);
     const isPlaying = hasAudio ? !audio.paused : (hasVideo ? !video.paused : false);
 
+    // ── BGM 音频元素 ──
+    const bgmAudio = _reelsState._bgmAudioEl;
+
     if (isPlaying) {
         if (audio) audio.pause();
         if (video) video.pause();
         if (fadeVideo) fadeVideo.pause();
+        if (bgmAudio) bgmAudio.pause();
         if (btn) btn.textContent = '▶️';
         return;
     }
@@ -2393,6 +2599,11 @@ function reelsTogglePlay() {
         if (fadeVideo && hasAudio) {
             fadeVideo.play().catch(() => { });
         }
+    }
+    // ── 同步播放 BGM ──
+    if (bgmAudio && bgmAudio.src && task && task.bgmPath) {
+        bgmAudio.currentTime = _getPreviewCurrentTime() || 0;
+        bgmAudio.play().catch(() => { });
     }
     if (btn) btn.textContent = '⏸️';
 }
@@ -2416,6 +2627,11 @@ function _onSeek(e) {
             const fadeDur = Math.min(cfg.duration, Math.max(0.1, video.duration * 0.45));
             try { fadeVideo.currentTime = (video.currentTime + fadeDur) % video.duration; } catch (e2) { }
         }
+    }
+    // ── 同步 BGM seek ──
+    const bgmAudio = _reelsState._bgmAudioEl;
+    if (bgmAudio && bgmAudio.src) {
+        bgmAudio.currentTime = target;
     }
     _updatePreviewTimeUI(target, duration);
     if (_reelsState.timelineEditor) {
@@ -2792,6 +3008,12 @@ function reelsCancelExport() {
 async function reelsStartExport() {
     const workMode = _getWorkMode();
 
+    // ── 导出前同步当前任务的覆层（用户可能删除/修改了覆层但尚未切换任务） ──
+    const curTask = _reelsState.tasks[_reelsState.selectedIdx];
+    if (curTask && _reelsState.overlayProxy && _reelsState.overlayProxy.overlayMgr) {
+        curTask.overlays = [...(_reelsState.overlayProxy.overlayMgr.overlays || [])];
+    }
+
     // 导出前自动对齐未对齐的 TXT 任务
     if (workMode !== 'srt') {
         const unaligned = _reelsState.tasks.filter(t =>
@@ -2887,6 +3109,8 @@ async function reelsStartExport() {
     let loopFadeDur = parseFloat(loopFadeDurEl ? loopFadeDurEl.value : '1');
     if (!Number.isFinite(loopFadeDur) || loopFadeDur <= 0) loopFadeDur = 1.0;
     loopFadeDur = Math.max(0.1, Math.min(3, loopFadeDur));
+    let customDuration = parseFloat((document.getElementById('reels-custom-duration') || {}).value || '0');
+    if (!Number.isFinite(customDuration) || customDuration < 0) customDuration = 0;
 
     _reelsState.isExporting = true;
     const progressBar = document.getElementById('reels-export-progress');
@@ -2962,6 +3186,9 @@ async function reelsStartExport() {
                     bgVolume: bgVolume / 100,
                     loopFade,
                     loopFadeDur,
+                    customDuration: task.customDuration || customDuration || 0,
+                    bgmPath: task.bgmPath || '',
+                    bgmVolume: (task.bgmVolume != null ? task.bgmVolume : 30) / 100,
                     isCancelled: () => !_reelsState.isExporting,
                     onProgress: (pct) => {
                         if (statusEl) statusEl.textContent = `导出中 ${i + 1}/${tasks.length}: ${task.fileName} (${pct}%)`;
@@ -2993,6 +3220,8 @@ async function reelsStartExport() {
                     loop_fade_dur: loopFadeDur,
                     voice_volume: voiceVolume / 100,
                     bg_volume: bgVolume / 100,
+                    bgm_path: task.bgmPath || '',
+                    bgm_volume: (task.bgmVolume != null ? task.bgmVolume : 30) / 100,
                 });
             } else if (window.electronAPI && window.electronAPI.burnSubtitles) {
                 const assContent = window.ReelsSubtitleProcessor

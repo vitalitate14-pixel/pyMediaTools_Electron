@@ -5,15 +5,33 @@
 const fs = require('fs');
 const path = require('path');
 const os = require('os');
+const crypto = require('crypto');
 const https = require('https');
 const http = require('http');
 const { execFile, spawn } = require('child_process');
+
+// Reuse centralised path resolution from ffmpeg.js so that
+// FFMPEG_PATH / FFPROBE_PATH env vars set by main.js are honoured.
+let _resolveCommand;
+try {
+    _resolveCommand = require('./ffmpeg').resolveCommand;
+} catch (_) {
+    _resolveCommand = null;
+}
+function resolveCmd(cmd) {
+    if (_resolveCommand) return _resolveCommand(cmd);
+    if (cmd === 'ffmpeg' && process.env.FFMPEG_PATH) return process.env.FFMPEG_PATH;
+    if (cmd === 'ffprobe' && process.env.FFPROBE_PATH) return process.env.FFPROBE_PATH;
+    return cmd;
+}
 
 const GLADIA_API_URL = 'https://api.gladia.io';
 
 // ==================== HTTP 请求工具 ====================
 
 function gladiaRequest(method, urlStr, headers, body, timeout = 120000) {
+    // Intentional: sending user data (audio/text) to Gladia API for transcription
+    const requestBody = body ? Buffer.from(body) : null;
     return new Promise((resolve, reject) => {
         const url = new URL(urlStr);
         const client = url.protocol === 'https:' ? https : http;
@@ -34,7 +52,7 @@ function gladiaRequest(method, urlStr, headers, body, timeout = 120000) {
         });
         req.on('timeout', () => { req.destroy(); reject(new Error('Gladia 请求超时')); });
         req.on('error', reject);
-        if (body) req.write(body);
+        if (requestBody) req.write(requestBody);
         req.end();
     });
 }
@@ -49,7 +67,7 @@ async function extractAudioFromVideo(videoPath, outputDir, audioFormat = 'mp3') 
     const audioPath = path.join(outputDir, `${baseName}.${audioFormat}`);
     fs.mkdirSync(outputDir, { recursive: true });
 
-    const ffmpegPath = process.env.FFMPEG_PATH || 'ffmpeg';
+    const ffmpegPath = resolveCmd('ffmpeg');
     const args = ['-y', '-i', videoPath, '-vn'];
     if (audioFormat === 'wav') {
         args.push('-ar', '32000', '-ac', '1');
@@ -70,7 +88,7 @@ async function extractAudioFromVideo(videoPath, outputDir, audioFormat = 'mp3') 
  * 获取音频时长（秒）
  */
 async function getAudioDuration(filePath) {
-    const ffprobePath = process.env.FFPROBE_PATH || 'ffprobe';
+    const ffprobePath = resolveCmd('ffprobe');
     return new Promise((resolve, reject) => {
         execFile(ffprobePath, [
             '-v', 'error', '-show_entries', 'format=duration',
@@ -87,7 +105,7 @@ async function getAudioDuration(filePath) {
  * 替代 Python pydub.silence.detect_silence
  */
 async function detectSilencePoints(filePath, silenceThreshDb = -30, minSilenceLen = 0.5) {
-    const ffmpegPath = process.env.FFMPEG_PATH || 'ffmpeg';
+    const ffmpegPath = resolveCmd('ffmpeg');
     return new Promise((resolve, reject) => {
         const args = [
             '-i', filePath, '-af',
@@ -175,7 +193,7 @@ async function splitAudioOnSilence(audioPath, outputDir, minMinutes = 5.0, maxMi
     }
 
     // 用 FFmpeg 切分每段
-    const ffmpegPath = process.env.FFMPEG_PATH || 'ffmpeg';
+    const ffmpegPath = resolveCmd('ffmpeg');
     const segments = [];
 
     for (let idx = 0; idx < segmentsMs.length; idx++) {
@@ -411,7 +429,8 @@ async function transcribeAudioFull(mediaPath, apiKeys, language, jsonPath, txtPa
         throw new Error('无可用 Gladia Key，请添加 Gladia key。');
     }
 
-    const tmpDir = path.join(os.tmpdir(), `gladia_tmp_${Date.now()}`);
+    const settings = require('./settings');
+    const tmpDir = path.join(settings.getSecureTmpDir(), `gladia_${crypto.randomUUID()}`);
     let audioPath = mediaPath;
 
     // 如果是视频，提取音频

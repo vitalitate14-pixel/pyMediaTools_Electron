@@ -9096,3 +9096,100 @@ async function startUniRename() {
 document.addEventListener('DOMContentLoaded', () => {
     setTimeout(_initUniRename, 200);
 });
+
+// ==================== 版本 & 更新检查 ====================
+
+// 初始化版本显示 + 更新监听
+document.addEventListener('DOMContentLoaded', () => {
+    // 加载版本号
+    if (window.electronAPI?.getAppVersion) {
+        window.electronAPI.getAppVersion().then(ver => {
+            const el = document.getElementById('app-version-display');
+            if (el && ver) el.textContent = `v${ver}`;
+        }).catch(() => { });
+    }
+
+    // 监听更新状态事件
+    if (window.electronAPI?.onUpdateStatus) {
+        window.electronAPI.onUpdateStatus((data) => {
+            const statusEl = document.getElementById('update-status-text');
+            const progressBar = document.getElementById('update-progress-bar');
+            const progressInner = document.getElementById('update-progress-inner');
+            const btn = document.getElementById('check-update-btn');
+
+            if (!statusEl) return;
+
+            switch (data.status) {
+                case 'checking':
+                    statusEl.textContent = '⏳ 正在检查...';
+                    statusEl.style.color = 'var(--text-secondary)';
+                    if (btn) btn.disabled = true;
+                    break;
+                case 'available':
+                    statusEl.textContent = `🎉 发现新版本 ${data.version}`;
+                    statusEl.style.color = '#00d9a5';
+                    if (btn) { btn.disabled = false; btn.textContent = '📥 下载更新'; }
+                    break;
+                case 'up-to-date':
+                    statusEl.textContent = '✅ 已是最新版本';
+                    statusEl.style.color = '#00d9a5';
+                    if (btn) { btn.disabled = false; btn.textContent = '🔄 检查更新'; }
+                    break;
+                case 'downloading':
+                    statusEl.textContent = `⬇️ 下载中 ${data.percent || 0}%`;
+                    statusEl.style.color = 'var(--accent-color)';
+                    if (progressBar) progressBar.classList.remove('hidden');
+                    if (progressInner) progressInner.style.width = `${data.percent || 0}%`;
+                    if (btn) btn.disabled = true;
+                    break;
+                case 'downloaded':
+                    statusEl.textContent = `✅ v${data.version} 已下载，重启即可安装`;
+                    statusEl.style.color = '#00d9a5';
+                    if (progressBar) progressBar.classList.add('hidden');
+                    if (btn) { btn.disabled = false; btn.textContent = '🔄 重启安装'; btn.onclick = () => window.electronAPI.installUpdate(); }
+                    break;
+                case 'error':
+                    statusEl.textContent = `❌ ${data.message}`;
+                    statusEl.style.color = '#ff4757';
+                    if (progressBar) progressBar.classList.add('hidden');
+                    if (btn) { btn.disabled = false; btn.textContent = '🔄 重试'; }
+                    break;
+            }
+        });
+    }
+});
+
+// 手动检查更新
+async function checkAppUpdate() {
+    const statusEl = document.getElementById('update-status-text');
+    const btn = document.getElementById('check-update-btn');
+
+    if (!window.electronAPI?.checkForUpdates) {
+        if (statusEl) {
+            statusEl.textContent = '⚠️ 仅打包版支持自动更新';
+            statusEl.style.color = '#f0ad4e';
+        }
+        return;
+    }
+
+    if (btn) btn.disabled = true;
+    if (statusEl) {
+        statusEl.textContent = '⏳ 正在检查...';
+        statusEl.style.color = 'var(--text-secondary)';
+    }
+
+    try {
+        const result = await window.electronAPI.checkForUpdates();
+        if (!result.success && statusEl) {
+            statusEl.textContent = `❌ ${result.error || '检查失败'}`;
+            statusEl.style.color = '#ff4757';
+        }
+    } catch (e) {
+        if (statusEl) {
+            statusEl.textContent = `❌ ${e.message || '检查失败'}`;
+            statusEl.style.color = '#ff4757';
+        }
+    } finally {
+        if (btn) btn.disabled = false;
+    }
+}

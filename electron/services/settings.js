@@ -5,6 +5,7 @@
 const fs = require('fs');
 const path = require('path');
 const os = require('os');
+const crypto = require('crypto');
 const { exec } = require('child_process');
 const archiver = require('archiver');
 
@@ -42,6 +43,31 @@ function getBackendDir() {
         return userDataBackend;
     }
     return path.join(__dirname, '..', '..', 'backend');
+}
+
+/**
+ * 获取安全的临时文件目录（app-scoped，非共享 /tmp）
+ * 用于替代 os.tmpdir() 以避免 CWE-377 不安全临时文件问题
+ */
+function getSecureTmpDir(subDir) {
+    let baseDir;
+    try {
+        const { app } = require('electron');
+        baseDir = path.join(app.getPath('userData'), 'tmp');
+    } catch {
+        baseDir = path.join(os.homedir(), '.pymediatools_tmp');
+    }
+    const dir = subDir ? path.join(baseDir, subDir) : baseDir;
+    fs.mkdirSync(dir, { recursive: true });
+    return dir;
+}
+
+/**
+ * 生成安全的临时文件路径
+ */
+function secureTmpFile(prefix, ext) {
+    const dir = getSecureTmpDir();
+    return path.join(dir, `${prefix}_${crypto.randomUUID()}${ext || ''}`);
 }
 
 function readJSON(filePath) {
@@ -189,6 +215,8 @@ function getLanguages() {
 
 module.exports = {
     getBackendDir,
+    getSecureTmpDir,
+    secureTmpFile,
     readJSON,
     writeJSON,
     loadGladiaKeys,

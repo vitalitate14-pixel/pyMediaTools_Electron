@@ -114,7 +114,7 @@ function createWindow() {
             nodeIntegration: false,
             contextIsolation: true,
             sandbox: false,
-            webSecurity: true,
+            webSecurity: false,  // 桌面应用需要从 http://localhost 加载 file:// 本地媒体
             preload: path.join(__dirname, 'preload.js')
         },
         titleBarStyle: 'hiddenInset',
@@ -156,6 +156,10 @@ app.whenReady().then(async () => {
     log(`FFmpeg PATH configured`);
 
     // ==================== IPC 处理 - 基本功能 ====================
+    ipcMain.handle('get-app-version', () => {
+        return app.getVersion();
+    });
+
     ipcMain.handle('select-directory', async () => {
         const result = await dialog.showOpenDialog(mainWindow, {
             properties: ['openDirectory', 'createDirectory'],
@@ -179,8 +183,8 @@ app.whenReady().then(async () => {
     ipcMain.handle('burn-subtitles', async (event, { videoPath, assContent, outputPath, crf }) => {
         const os = require('os');
         const { execFile } = require('child_process');
-        const tmpDir = os.tmpdir();
-        const assPath = path.join(tmpDir, `reels_sub_${Date.now()}.ass`);
+        const settingsService = require('./services/settings');
+        const assPath = settingsService.secureTmpFile('reels_sub', '.ass');
 
         // Write ASS content to temp file
         fs.writeFileSync(assPath, assContent, 'utf-8');
@@ -229,6 +233,8 @@ app.whenReady().then(async () => {
             loopFadeDur: parseFloat(data.loop_fade_dur ?? 1.0),
             voiceVolume: parseFloat(data.voice_volume ?? 1.0),
             bgVolume: parseFloat(data.bg_volume ?? 0.0),
+            bgmPath: data.bgm_path || '',
+            bgmVolume: parseFloat(data.bgm_volume ?? 0),
         });
         return { success: true, data: res };
     });

@@ -50,6 +50,216 @@ function reelsToggleBatchTable() {
 }
 
 // ═══════════════════════════════════════════════════════
+// 3b. Language list for subtitle alignment
+// ═══════════════════════════════════════════════════════
+
+const REELS_LANG_STORAGE_KEY = 'reels_align_language';
+
+const REELS_ALL_LANGUAGES = [
+    // ── 常用 ──
+    { name: '英语', code: 'en', en: 'English', pinned: true },
+    { name: '中文', code: 'zh', en: 'Chinese', pinned: true },
+    { name: '日语', code: 'ja', en: 'Japanese', pinned: true },
+    { name: '韩语', code: 'ko', en: 'Korean', pinned: true },
+    { name: '西班牙语', code: 'es', en: 'Spanish', pinned: true },
+    { name: '法语', code: 'fr', en: 'French', pinned: true },
+    { name: '德语', code: 'de', en: 'German', pinned: true },
+    { name: '葡萄牙语', code: 'pt', en: 'Portuguese', pinned: true },
+    { name: '俄语', code: 'ru', en: 'Russian', pinned: true },
+    { name: '阿拉伯语', code: 'ar', en: 'Arabic', pinned: true },
+    { name: '粤语', code: 'yue', en: 'Cantonese', pinned: true },
+    // ── 亚洲 ──
+    { name: '印地语', code: 'hi', en: 'Hindi' },
+    { name: '泰语', code: 'th', en: 'Thai' },
+    { name: '越南语', code: 'vi', en: 'Vietnamese' },
+    { name: '印尼语', code: 'id', en: 'Indonesian' },
+    { name: '马来语', code: 'ms', en: 'Malay' },
+    { name: '泰米尔语', code: 'ta', en: 'Tamil' },
+    { name: '泰卢固语', code: 'te', en: 'Telugu' },
+    { name: '孟加拉语', code: 'bn', en: 'Bengali' },
+    { name: '卡纳达语', code: 'kn', en: 'Kannada' },
+    { name: '马拉雅拉姆语', code: 'ml', en: 'Malayalam' },
+    { name: '马拉地语', code: 'mr', en: 'Marathi' },
+    { name: '古吉拉特语', code: 'gu', en: 'Gujarati' },
+    { name: '旁遮普语', code: 'pa', en: 'Punjabi' },
+    { name: '僧伽罗语', code: 'si', en: 'Sinhala' },
+    { name: '尼泊尔语', code: 'ne', en: 'Nepali' },
+    { name: '乌尔都语', code: 'ur', en: 'Urdu' },
+    { name: '高棉语', code: 'km', en: 'Khmer' },
+    { name: '老挝语', code: 'lo', en: 'Lao' },
+    { name: '蒙古语', code: 'mn', en: 'Mongolian' },
+    { name: '缅甸语', code: 'my', en: 'Myanmar' },
+    { name: '藏语', code: 'bo', en: 'Tibetan' },
+    { name: '他加禄语', code: 'tl', en: 'Tagalog' },
+    { name: '爪哇语', code: 'jw', en: 'Javanese' },
+    { name: '巽他语', code: 'su', en: 'Sundanese' },
+    { name: '阿萨姆语', code: 'as', en: 'Assamese' },
+    // ── 欧洲 ──
+    { name: '意大利语', code: 'it', en: 'Italian' },
+    { name: '荷兰语', code: 'nl', en: 'Dutch' },
+    { name: '波兰语', code: 'pl', en: 'Polish' },
+    { name: '土耳其语', code: 'tr', en: 'Turkish' },
+    { name: '瑞典语', code: 'sv', en: 'Swedish' },
+    { name: '芬兰语', code: 'fi', en: 'Finnish' },
+    { name: '丹麦语', code: 'da', en: 'Danish' },
+    { name: '挪威语', code: 'no', en: 'Norwegian' },
+    { name: '新挪威语', code: 'nn', en: 'Nynorsk' },
+    { name: '捷克语', code: 'cs', en: 'Czech' },
+    { name: '斯洛伐克语', code: 'sk', en: 'Slovak' },
+    { name: '匈牙利语', code: 'hu', en: 'Hungarian' },
+    { name: '罗马尼亚语', code: 'ro', en: 'Romanian' },
+    { name: '保加利亚语', code: 'bg', en: 'Bulgarian' },
+    { name: '希腊语', code: 'el', en: 'Greek' },
+    { name: '乌克兰语', code: 'uk', en: 'Ukrainian' },
+    { name: '白俄罗斯语', code: 'be', en: 'Belarusian' },
+    { name: '克罗地亚语', code: 'hr', en: 'Croatian' },
+    { name: '塞尔维亚语', code: 'sr', en: 'Serbian' },
+    { name: '斯洛文尼亚语', code: 'sl', en: 'Slovenian' },
+    { name: '立陶宛语', code: 'lt', en: 'Lithuanian' },
+    { name: '拉脱维亚语', code: 'lv', en: 'Latvian' },
+    { name: '爱沙尼亚语', code: 'et', en: 'Estonian' },
+    { name: '马其顿语', code: 'mk', en: 'Macedonian' },
+    { name: '波斯尼亚语', code: 'bs', en: 'Bosnian' },
+    { name: '阿尔巴尼亚语', code: 'sq', en: 'Albanian' },
+    { name: '冰岛语', code: 'is', en: 'Icelandic' },
+    { name: '马耳他语', code: 'mt', en: 'Maltese' },
+    { name: '卢森堡语', code: 'lb', en: 'Luxembourgish' },
+    { name: '法罗语', code: 'fo', en: 'Faroese' },
+    { name: '加泰罗尼亚语', code: 'ca', en: 'Catalan' },
+    { name: '加利西亚语', code: 'gl', en: 'Galician' },
+    { name: '巴斯克语', code: 'eu', en: 'Basque' },
+    { name: '奥克语', code: 'oc', en: 'Occitan' },
+    { name: '布列塔尼语', code: 'br', en: 'Breton' },
+    { name: '威尔士语', code: 'cy', en: 'Welsh' },
+    // ── 中东/中亚 ──
+    { name: '波斯语', code: 'fa', en: 'Persian' },
+    { name: '希伯来语', code: 'he', en: 'Hebrew' },
+    { name: '亚美尼亚语', code: 'hy', en: 'Armenian' },
+    { name: '格鲁吉亚语', code: 'ka', en: 'Georgian' },
+    { name: '阿塞拜疆语', code: 'az', en: 'Azerbaijani' },
+    { name: '哈萨克语', code: 'kk', en: 'Kazakh' },
+    { name: '乌兹别克语', code: 'uz', en: 'Uzbek' },
+    { name: '土库曼语', code: 'tk', en: 'Turkmen' },
+    { name: '塔吉克语', code: 'tg', en: 'Tajik' },
+    { name: '普什图语', code: 'ps', en: 'Pashto' },
+    { name: '信德语', code: 'sd', en: 'Sindhi' },
+    { name: '鞑靼语', code: 'tt', en: 'Tatar' },
+    { name: '巴什基尔语', code: 'ba', en: 'Bashkir' },
+    // ── 非洲 ──
+    { name: '南非荷兰语', code: 'af', en: 'Afrikaans' },
+    { name: '斯瓦希里语', code: 'sw', en: 'Swahili' },
+    { name: '约鲁巴语', code: 'yo', en: 'Yoruba' },
+    { name: '豪萨语', code: 'ha', en: 'Hausa' },
+    { name: '索马里语', code: 'so', en: 'Somali' },
+    { name: '绍纳语', code: 'sn', en: 'Shona' },
+    { name: '阿姆哈拉语', code: 'am', en: 'Amharic' },
+    { name: '林加拉语', code: 'ln', en: 'Lingala' },
+    { name: '马达加斯加语', code: 'mg', en: 'Malagasy' },
+    // ── 其他 ──
+    { name: '拉丁语', code: 'la', en: 'Latin' },
+    { name: '梵语', code: 'sa', en: 'Sanskrit' },
+    { name: '毛利语', code: 'mi', en: 'Maori' },
+    { name: '夏威夷语', code: 'haw', en: 'Hawaiian' },
+    { name: '海地克里奥尔语', code: 'ht', en: 'Haitian Creole' },
+    { name: '意第绪语', code: 'yi', en: 'Yiddish' },
+];
+
+function _initLangPicker(container) {
+    const btn = container.querySelector('#rbt-lang-picker-btn');
+    const dropdown = container.querySelector('#rbt-lang-dropdown');
+    const searchInput = container.querySelector('#rbt-lang-search');
+    const listEl = container.querySelector('#rbt-lang-list');
+    const hiddenInput = container.querySelector('#rbt-align-lang');
+    if (!btn || !dropdown || !listEl || !hiddenInput) return;
+
+    // Restore saved language
+    const savedLang = localStorage.getItem(REELS_LANG_STORAGE_KEY);
+    if (savedLang) {
+        const found = REELS_ALL_LANGUAGES.find(l => l.name === savedLang);
+        if (found) {
+            hiddenInput.value = found.name;
+            btn.textContent = found.name + ' ▾';
+        }
+    }
+
+    const renderList = (filter = '') => {
+        const q = filter.toLowerCase().trim();
+        const filtered = q
+            ? REELS_ALL_LANGUAGES.filter(l =>
+                l.name.includes(q) || l.en.toLowerCase().includes(q) || l.code.includes(q))
+            : REELS_ALL_LANGUAGES;
+
+        // Pinned first, then the rest
+        const pinned = filtered.filter(l => l.pinned);
+        const rest = filtered.filter(l => !l.pinned);
+        const sorted = [...pinned, ...rest];
+
+        listEl.innerHTML = sorted.map(l => `
+            <div class="rbt-lang-item" data-name="${l.name}"
+                 style="padding:6px 12px;cursor:pointer;font-size:12px;color:#ccc;
+                        border-bottom:1px solid rgba(255,255,255,0.04);
+                        display:flex;justify-content:space-between;align-items:center;
+                        ${hiddenInput.value === l.name ? 'background:rgba(0,212,255,0.12);color:#00D4FF;' : ''}
+                        ${l.pinned ? 'font-weight:600;' : ''}">
+                <span>${l.name}</span>
+                <span style="font-size:10px;color:#666;">${l.en}</span>
+            </div>
+        `).join('');
+
+        if (sorted.length === 0) {
+            listEl.innerHTML = '<div style="padding:12px;text-align:center;color:#555;font-size:11px;">未找到匹配语言</div>';
+        }
+    };
+
+    // Toggle dropdown
+    btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const isOpen = dropdown.style.display !== 'none';
+        dropdown.style.display = isOpen ? 'none' : 'block';
+        if (!isOpen) {
+            searchInput.value = '';
+            renderList();
+            setTimeout(() => searchInput.focus(), 30);
+        }
+    });
+
+    // Search filter
+    searchInput.addEventListener('input', () => {
+        renderList(searchInput.value);
+    });
+    searchInput.addEventListener('click', (e) => e.stopPropagation());
+
+    // Click item
+    listEl.addEventListener('click', (e) => {
+        const item = e.target.closest('.rbt-lang-item');
+        if (!item) return;
+        const name = item.dataset.name;
+        hiddenInput.value = name;
+        btn.textContent = name + ' ▾';
+        dropdown.style.display = 'none';
+        // Persist
+        localStorage.setItem(REELS_LANG_STORAGE_KEY, name);
+    });
+
+    // Hover effect
+    listEl.addEventListener('mouseover', (e) => {
+        const item = e.target.closest('.rbt-lang-item');
+        if (item) item.style.background = 'rgba(255,255,255,0.08)';
+    });
+    listEl.addEventListener('mouseout', (e) => {
+        const item = e.target.closest('.rbt-lang-item');
+        if (item) item.style.background = hiddenInput.value === item.dataset.name ? 'rgba(0,212,255,0.12)' : '';
+    });
+
+    // Click outside to close
+    document.addEventListener('click', (e) => {
+        if (!container.querySelector('#rbt-lang-picker-wrap')?.contains(e.target)) {
+            dropdown.style.display = 'none';
+        }
+    });
+}
+
+// ═══════════════════════════════════════════════════════
 // 4. Render the batch table
 // ═══════════════════════════════════════════════════════
 
@@ -63,7 +273,7 @@ function _renderBatchTable() {
     const tasks = state.tasks || [];
 
     // 获取已保存的卡片模板列表
-    const cardTemplates = _getCardTemplateList();
+    const cardTemplates = _getOverlayGroupPresetList();
     const subtitlePresets = _getSubtitlePresetList();
 
     container.innerHTML = `
@@ -82,14 +292,14 @@ function _renderBatchTable() {
                         <option value="audio">🎙 用MP3配音对齐</option>
                         <option value="video">🎬 用背景视频对齐</option>
                     </select>
-                    <select id="rbt-align-lang" style="font-size:11px;padding:3px 6px;background:#1a1a3a;color:#a0d0ff;border:1px solid #4a6a8a;border-radius:4px;">
-                        <option value="英语">英语</option>
-                        <option value="中文">中文</option>
-                        <option value="日语">日语</option>
-                        <option value="韩语">韩语</option>
-                        <option value="西班牙语">西语</option>
-                        <option value="法语">法语</option>
-                    </select>
+                    <div style="position:relative;display:inline-block;" id="rbt-lang-picker-wrap">
+                        <button id="rbt-lang-picker-btn" style="font-size:11px;padding:3px 10px;background:#1a1a3a;color:#a0d0ff;border:1px solid #4a6a8a;border-radius:4px;cursor:pointer;min-width:90px;text-align:left;">英语 ▾</button>
+                        <input type="hidden" id="rbt-align-lang" value="英语">
+                        <div id="rbt-lang-dropdown" style="display:none;position:absolute;top:100%;left:0;z-index:9999;background:#1a1a3a;border:1px solid #4a6a8a;border-radius:6px;width:220px;max-height:320px;box-shadow:0 8px 24px rgba(0,0,0,0.6);overflow:hidden;">
+                            <input id="rbt-lang-search" type="text" placeholder="🔍 搜索语言..." style="width:100%;box-sizing:border-box;padding:6px 10px;border:none;border-bottom:1px solid #333;background:#12122a;color:#ddd;font-size:12px;outline:none;">
+                            <div id="rbt-lang-list" style="max-height:270px;overflow-y:auto;"></div>
+                        </div>
+                    </div>
                     <button class="rbt-btn" id="rbt-align-all-btn" title="对齐所有有文案的任务，生成字幕时间轴" style="background:#2a4a6a;border-color:#4a6a8a;color:#a0d0ff;">🔗 对齐字幕</button>
                     <label style="display:flex;align-items:center;gap:3px;font-size:10px;color:#888;cursor:pointer;">
                         <input type="checkbox" id="rbt-force-realign"> 强制重新对齐
@@ -124,10 +334,12 @@ function _renderBatchTable() {
                             <th class="rbt-col-srt">📝 字幕</th>
                             <th class="rbt-col-txtcontent">� 文案内容</th>
                             <th class="rbt-col-bgm">🎵 配乐</th>
-                            <th class="rbt-col-title">📋 标题</th>
-                            <th class="rbt-col-body">📋 内容</th>
+                            <th class="rbt-col-title">📋 覆层标题</th>
+                            <th class="rbt-col-body">📋 覆层内容</th>
+                            <th class="rbt-col-footer">📋 覆层结尾</th>
+                            <th class="rbt-col-dur">⏱ 时长(s)</th>
                             <th class="rbt-col-tpl">🎬 字幕模板</th>
-                            <th class="rbt-col-tpl">📋 卡片模板</th>
+                            <th class="rbt-col-tpl">📦 覆层预设</th>
                             <th class="rbt-col-act">操作</th>
                         </tr>
                     </thead>
@@ -157,6 +369,7 @@ function _renderBatchRow(task, idx, subtitlePresets, cardTemplates) {
     const ov = (task.overlays || [])[0];
     const title = ov ? (ov.title_text || '') : '';
     const body = ov ? (ov.body_text || '') : '';
+    const footer = ov ? (ov.footer_text || '') : '';
     const bgName = _shortName(task.bgPath || task.videoPath || '');
     const audioName = _shortName(task.audioPath || '');
     const srtName = _shortName(task.srtPath || '');
@@ -190,23 +403,35 @@ function _renderBatchRow(task, idx, subtitlePresets, cardTemplates) {
     ).join('');
 
     const cardTplOptions = cardTemplates.map(t =>
-        `<option value="${_escHtml(t)}" ${ov && ov._templateName === t ? 'selected' : ''}>${_escHtml(t)}</option>`
+        `<option value="${_escHtml(t.name)}" ${task._overlayPresetName === t.name ? 'selected' : ''}>${_escHtml(t.name)} (${t.count}层)</option>`
     ).join('');
 
     return `
         <tr data-idx="${idx}" class="rbt-row ${idx === (window._reelsState?.selectedIdx || -1) ? 'rbt-row-selected' : ''}">
             <td class="rbt-col-num">${idx + 1}</td>
             <td class="rbt-col-bg rbt-droppable" data-field="bg">
-                ${bgContent}
+                <div style="display:flex;align-items:center;gap:2px;">
+                    <div style="flex:1;min-width:0;overflow:hidden;">${bgContent}</div>
+                    ${bgPath ? `<button class="rbt-field-clear" data-idx="${idx}" data-field="bg" title="清除背景">✕</button>` : ''}
+                </div>
             </td>
             <td class="rbt-col-audio rbt-droppable" data-field="audio">
-                <span class="rbt-file-name" title="${_escHtml(task.audioPath || '')}">${audioName || '<span class="rbt-placeholder">—</span>'}</span>
+                <div style="display:flex;align-items:center;gap:2px;">
+                    <span class="rbt-file-name" style="flex:1" title="${_escHtml(task.audioPath || '')}">${audioName || '<span class="rbt-placeholder">—</span>'}</span>
+                    ${audioName ? `<button class="rbt-field-clear" data-idx="${idx}" data-field="audio" title="清除音频">✕</button>` : ''}
+                </div>
             </td>
             <td class="rbt-col-srt rbt-droppable" data-field="srt">
-                <span class="rbt-file-name" title="${_escHtml(task.srtPath || '')}">${srtName || '<span class="rbt-placeholder">—</span>'}</span>
+                <div style="display:flex;align-items:center;gap:2px;">
+                    <span class="rbt-file-name" style="flex:1" title="${_escHtml(task.srtPath || '')}">${srtName || '<span class="rbt-placeholder">—</span>'}</span>
+                    ${srtName ? `<button class="rbt-field-clear" data-idx="${idx}" data-field="srt" title="清除字幕">✕</button>` : ''}
+                </div>
             </td>
             <td class="rbt-col-txtcontent">
-                <textarea class="rbt-textarea rbt-txtcontent-input" data-idx="${idx}" rows="3" placeholder="粘贴或输入文案...">${_escHtml(task.txtContent || '')}</textarea>
+                <div style="position:relative;">
+                    <textarea class="rbt-textarea rbt-txtcontent-input" data-idx="${idx}" rows="3" placeholder="粘贴或输入文案...">${_escHtml(task.txtContent || '')}</textarea>
+                    ${task.txtContent ? `<button class="rbt-field-clear" data-idx="${idx}" data-field="txt" title="清除文案" style="position:absolute;top:2px;right:2px;">✕</button>` : ''}
+                </div>
                 <div style="display:flex;align-items:center;gap:4px;margin-top:2px;">
                     <span style="font-size:10px;color:${task.aligned ? '#4ade80' : task.txtContent ? '#facc15' : '#666'};">${task.aligned ? '✅ 已对齐' : task.txtContent ? '⏳ 待对齐' : ''}</span>
                     ${task.srtPath ? `<span style="font-size:10px;color:#888;" title="${_escHtml(task.srtPath)}">📄 ${_shortName(task.srtPath)}</span>` : ''}
@@ -217,6 +442,7 @@ function _renderBatchRow(task, idx, subtitlePresets, cardTemplates) {
                     <input type="checkbox" class="rbt-bgm-check" data-idx="${idx}" title="勾选后可批量设置配乐">
                     <span class="rbt-file-name rbt-bgm-pick" data-idx="${idx}" title="${_escHtml(task.bgmPath || '')}"
                           style="cursor:pointer;flex:1;">${bgmName || '<span class="rbt-placeholder">点击选择</span>'}</span>
+                    ${bgmName ? `<button class="rbt-field-clear" data-idx="${idx}" data-field="bgm" title="清除配乐">✕</button>` : ''}
                 </div>
                 <div style="display:flex;align-items:center;gap:4px;margin-top:3px;">
                     <span style="font-size:10px;color:#888;white-space:nowrap;">🔉</span>
@@ -231,6 +457,13 @@ function _renderBatchRow(task, idx, subtitlePresets, cardTemplates) {
             <td class="rbt-col-body">
                 <textarea class="rbt-textarea rbt-body-input" data-idx="${idx}" rows="2">${_escHtml(body)}</textarea>
             </td>
+            <td class="rbt-col-footer">
+                <textarea class="rbt-textarea rbt-footer-input" data-idx="${idx}" rows="2">${_escHtml(footer)}</textarea>
+            </td>
+            <td class="rbt-col-dur">
+                <input type="number" class="rbt-textarea rbt-dur-input" data-idx="${idx}" min="0" max="600" step="0.5"
+                    value="${task.customDuration ? task.customDuration : ''}" placeholder="自动" style="width:55px;text-align:center;" title="留空=自动跟随音频/视频时长，输入数字=自定义秒数">
+            </td>
             <td class="rbt-col-tpl">
                 <select class="rbt-select rbt-sub-tpl-select" data-idx="${idx}">
                     <option value="">默认</option>
@@ -239,7 +472,7 @@ function _renderBatchRow(task, idx, subtitlePresets, cardTemplates) {
             </td>
             <td class="rbt-col-tpl">
                 <select class="rbt-select rbt-card-tpl-select" data-idx="${idx}">
-                    <option value="">默认</option>
+                    <option value="">无预设</option>
                     ${cardTplOptions}
                 </select>
             </td>
@@ -265,6 +498,9 @@ function _bindBatchTableEvents() {
         _applyBatchTableChanges();
         reelsToggleBatchTable();
     });
+
+    // ── Language searchable picker ──
+    _initLangPicker(container);
 
     // Add row
     container.querySelector('#rbt-add-row-btn')?.addEventListener('click', () => {
@@ -464,6 +700,16 @@ function _bindBatchTableEvents() {
             if (e.target.classList.contains('rbt-bgm-vol')) {
                 const label = e.target.parentElement.querySelector('.rbt-bgm-vol-label');
                 if (label) label.textContent = e.target.value + '%';
+                // Sync volume to task for real-time preview
+                const idx = parseInt(e.target.dataset.idx);
+                const task = window._reelsState && window._reelsState.tasks[idx];
+                if (task) {
+                    task.bgmVolume = parseInt(e.target.value) || 0;
+                    // If this is the selected task, update preview audio immediately
+                    if (idx === window._reelsState.selectedIdx && typeof _applyPreviewAudioMix === 'function') {
+                        _applyPreviewAudioMix();
+                    }
+                }
             }
         });
         tbody.addEventListener('click', (e) => {
@@ -498,6 +744,24 @@ function _bindBatchTableEvents() {
             if (delBtn) {
                 const idx = parseInt(delBtn.dataset.idx);
                 window._reelsState.tasks.splice(idx, 1);
+                _renderBatchTable();
+                return;
+            }
+            // 单字段清除按钮
+            const clearBtn = e.target.closest('.rbt-field-clear');
+            if (clearBtn) {
+                e.stopPropagation();
+                const idx = parseInt(clearBtn.dataset.idx);
+                const field = clearBtn.dataset.field;
+                const task = window._reelsState.tasks[idx];
+                if (!task) return;
+                switch (field) {
+                    case 'bg': task.bgPath = ''; task.videoPath = ''; task.bgSrcUrl = ''; break;
+                    case 'audio': task.audioPath = ''; break;
+                    case 'srt': task.srtPath = ''; task.aligned = false; break;
+                    case 'txt': task.txtContent = ''; task.aligned = false; break;
+                    case 'bgm': task.bgmPath = ''; break;
+                }
                 _renderBatchTable();
                 return;
             }
@@ -536,6 +800,7 @@ function _applyBatchTableChanges() {
 
     const titleInputs = container.querySelectorAll('.rbt-title-input');
     const bodyInputs = container.querySelectorAll('.rbt-body-input');
+    const footerInputs = container.querySelectorAll('.rbt-footer-input');
     const subTplSelects = container.querySelectorAll('.rbt-sub-tpl-select');
     const cardTplSelects = container.querySelectorAll('.rbt-card-tpl-select');
 
@@ -544,11 +809,13 @@ function _applyBatchTableChanges() {
         const task = state.tasks[idx];
         if (!task) return;
         if (!task.overlays || !task.overlays[0]) {
-            // 创建覆层
+            // Only create overlay if user actually typed something
+            const titleVal = el.value.trim();
+            if (!titleVal) return;
             const ReelsOverlay = window.ReelsOverlay;
             if (ReelsOverlay) {
                 task.overlays = [ReelsOverlay.createTextCardOverlay({
-                    title_text: el.value,
+                    title_text: titleVal,
                     body_text: '',
                     start: 0, end: 9999,
                 })];
@@ -563,6 +830,23 @@ function _applyBatchTableChanges() {
         const task = state.tasks[idx];
         if (!task || !task.overlays || !task.overlays[0]) return;
         task.overlays[0].body_text = el.value;
+    });
+
+    footerInputs.forEach(el => {
+        const idx = parseInt(el.dataset.idx);
+        const task = state.tasks[idx];
+        if (!task || !task.overlays || !task.overlays[0]) return;
+        task.overlays[0].footer_text = el.value;
+    });
+
+    // 自定义时长
+    const durInputs = container.querySelectorAll('.rbt-dur-input');
+    durInputs.forEach(el => {
+        const idx = parseInt(el.dataset.idx);
+        const task = state.tasks[idx];
+        if (!task) return;
+        const v = parseFloat(el.value) || 0;
+        task.customDuration = v > 0 ? v : 0;
     });
 
     // 文案内容（用于字幕对齐）
@@ -586,14 +870,14 @@ function _applyBatchTableChanges() {
         task._subtitlePreset = el.value || '';
     });
 
-    // 覆盖层卡片模板
+    // 覆盖层组预设
     cardTplSelects.forEach(el => {
         const idx = parseInt(el.dataset.idx);
         const task = state.tasks[idx];
-        if (!task || !task.overlays || !task.overlays[0]) return;
-        const tplName = el.value;
-        if (tplName) {
-            _applyCardTemplateToOverlay(task.overlays[0], tplName);
+        if (!task) return;
+        const presetName = el.value;
+        if (presetName) {
+            _applyOverlayGroupPresetToTask(task, presetName);
         }
     });
 
@@ -608,6 +892,18 @@ function _applyBatchTableChanges() {
 
     // 刷新任务列表
     if (typeof _renderTaskList === 'function') _renderTaskList();
+
+    // 同步当前选中任务的覆层到 overlayMgr
+    const selIdx = state.selectedIdx;
+    const selTask = state.tasks[selIdx];
+    if (selTask && state.overlayProxy && state.overlayProxy.overlayMgr) {
+        const mgr = state.overlayProxy.overlayMgr;
+        mgr.overlays = selTask.overlays ? [...selTask.overlays] : [];
+        if (state.overlayPanel) {
+            state.overlayPanel.deselectOverlay();
+            state.overlayPanel._refreshList();
+        }
+    }
 }
 
 // ═══════════════════════════════════════════════════════
@@ -868,29 +1164,70 @@ function _getSubtitlePresetList() {
     return [];
 }
 
-function _getCardTemplateList() {
+function _getOverlayGroupPresetList() {
+    try {
+        const stored = localStorage.getItem('reels_overlay_group_presets');
+        if (stored) {
+            const obj = JSON.parse(stored);
+            return Object.keys(obj).map(name => ({
+                name,
+                count: Array.isArray(obj[name]) ? obj[name].length : 0,
+            }));
+        }
+    } catch (e) { }
+    // Fallback: also include single-card templates as 1-layer presets
     try {
         const stored = localStorage.getItem('reels_card_templates');
         if (stored) {
             const obj = JSON.parse(stored);
-            return Object.keys(obj);
+            return Object.keys(obj).map(name => ({ name, count: 1 }));
         }
     } catch (e) { }
     return [];
 }
 
-function _applyCardTemplateToOverlay(ov, tplName) {
+function _applyOverlayGroupPresetToTask(task, presetName) {
     try {
-        const stored = localStorage.getItem('reels_card_templates');
-        if (!stored) return;
-        const obj = JSON.parse(stored);
-        const tpl = obj[tplName];
-        if (!tpl) return;
-        const keepKeys = ['id', 'type', 'title_text', 'body_text', 'start', 'end'];
-        for (const [k, v] of Object.entries(tpl)) {
-            if (!keepKeys.includes(k)) ov[k] = v;
+        // Try group presets first
+        const groupStored = localStorage.getItem('reels_overlay_group_presets');
+        if (groupStored) {
+            const presets = JSON.parse(groupStored);
+            if (presets[presetName] && Array.isArray(presets[presetName])) {
+                const layers = presets[presetName];
+                task.overlays = layers.map(layerData => {
+                    const clone = JSON.parse(JSON.stringify(layerData));
+                    clone.id = 'ov_' + Date.now() + '_' + Math.random().toString(36).slice(2, 8);
+                    // Preserve existing title/body text if already set in the task
+                    return clone;
+                });
+                task._overlayPresetName = presetName;
+                return;
+            }
         }
-        ov._templateName = tplName;
+        // Fallback: single card template
+        const cardStored = localStorage.getItem('reels_card_templates');
+        if (cardStored) {
+            const templates = JSON.parse(cardStored);
+            const tpl = templates[presetName];
+            if (tpl) {
+                if (!task.overlays || !task.overlays[0]) {
+                    const ReelsOverlay = window.ReelsOverlay;
+                    if (ReelsOverlay) {
+                        task.overlays = [ReelsOverlay.createTextCardOverlay({
+                            title_text: '', body_text: '',
+                            start: 0, end: 9999,
+                        })];
+                    }
+                }
+                if (task.overlays && task.overlays[0]) {
+                    const keepKeys = ['id', 'type', 'title_text', 'body_text', 'start', 'end'];
+                    for (const [k, v] of Object.entries(tpl)) {
+                        if (!keepKeys.includes(k)) task.overlays[0][k] = v;
+                    }
+                }
+                task._overlayPresetName = presetName;
+            }
+        }
     } catch (e) { }
 }
 
@@ -906,10 +1243,7 @@ function _batchAddEmptyRow() {
         audioPath: null, srtPath: null,
         segments: [],
         videoPath: null, srcUrl: null,
-        overlays: [ReelsOverlay.createTextCardOverlay({
-            title_text: '', body_text: '',
-            start: 0, end: 9999,
-        })],
+        overlays: [],
     });
 }
 
@@ -1002,10 +1336,7 @@ function _batchImportFolder(files) {
             segments: [],
             videoPath: g.bg ? (g.bg.path || g.bg.name) : null,
             srcUrl: null,
-            overlays: ReelsOverlay ? [ReelsOverlay.createTextCardOverlay({
-                title_text: '', body_text: '',
-                start: 0, end: 9999,
-            })] : [],
+            overlays: [],
         };
 
         // 生成预览 URL
@@ -1113,10 +1444,7 @@ function _createEmptyTask() {
         audioPath: null, srtPath: null,
         segments: [],
         videoPath: null, srcUrl: null,
-        overlays: ReelsOverlay ? [ReelsOverlay.createTextCardOverlay({
-            title_text: '', body_text: '',
-            start: 0, end: 9999,
-        })] : [],
+        overlays: [],
     };
 }
 
@@ -1238,10 +1566,7 @@ function _batchAssignTxtFiles(files) {
                 audioPath: null, srtPath: null,
                 segments: [],
                 videoPath: null, srcUrl: null,
-                overlays: ReelsOverlay ? [ReelsOverlay.createTextCardOverlay({
-                    title_text: '', body_text: '',
-                    start: 0, end: 9999,
-                })] : [],
+                overlays: [],
             };
             state.tasks.push(targetTask);
             fallbackIdx = state.tasks.length;
@@ -1448,6 +1773,7 @@ async function _batchAlignAllTasks() {
                     language: language,
                     audio_cut_length: 5.0,
                     output_dir: audioDir,
+                    force: task.aligned ? true : false,  // 已对齐过则强制重新转录
                 }),
             });
 
@@ -1573,6 +1899,8 @@ function _injectBatchTableCSS() {
         .rbt-col-bgm { width:140px; }
         .rbt-col-title { width:200px; }
         .rbt-col-body { min-width:250px; }
+        .rbt-col-footer { min-width:180px; }
+        .rbt-col-dur { width:70px; text-align:center; }
         .rbt-col-tpl { width:120px; }
         .rbt-col-act { width:70px; white-space:nowrap; }
         .rbt-file-name {
@@ -1596,6 +1924,12 @@ function _injectBatchTableCSS() {
             cursor:pointer; font-size:14px; border-radius:4px;
         }
         .rbt-row-btn:hover { background:rgba(255,255,255,0.1); }
+        .rbt-field-clear {
+            background:none; border:none; color:#888; cursor:pointer;
+            font-size:11px; padding:1px 4px; border-radius:3px; line-height:1;
+            flex-shrink:0; opacity:0.6; transition:all 0.15s;
+        }
+        .rbt-field-clear:hover { color:#ff6b6b; opacity:1; background:rgba(255,107,107,0.15); }
         .rbt-footer {
             display:flex; justify-content:space-between; align-items:center;
             padding:12px 24px; border-top:1px solid #1a1a4a; background:#12123a;

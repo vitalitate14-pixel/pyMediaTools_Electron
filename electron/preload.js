@@ -40,6 +40,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
     platform: process.platform,
     resolveAssetUrl,
     toFileUrl,
+    getAppVersion: () => ipcRenderer.invoke('get-app-version'),
 
     // 选择目录
     selectDirectory: () => ipcRenderer.invoke('select-directory'),
@@ -50,6 +51,16 @@ contextBridge.exposeInMainWorld('electronAPI', {
     reelsCompose: (opts) => ipcRenderer.invoke('reels-compose', opts),
     reelsComposeWysiwyg: (action, data) => ipcRenderer.invoke('reels-compose-wysiwyg', action, data),
     getMediaDuration: (filePath) => ipcRenderer.invoke('get-media-duration', filePath),
+
+    // 自动更新
+    checkForUpdates: () => ipcRenderer.invoke('check-for-updates'),
+    downloadUpdate: () => ipcRenderer.invoke('download-update'),
+    installUpdate: () => ipcRenderer.invoke('install-update'),
+    onUpdateStatus: (callback) => {
+        const handler = (_, data) => callback(data);
+        ipcRenderer.on('update-status', handler);
+        return () => ipcRenderer.removeListener('update-status', handler);
+    },
 
     // 扫描本地字体
     scanFonts: () => ipcRenderer.invoke('scan-fonts'),

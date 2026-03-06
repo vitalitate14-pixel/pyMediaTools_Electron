@@ -82,7 +82,8 @@ async function prepareBg(opts) {
     } = opts;
 
     const ffmpeg = findFFmpeg();
-    const framesDir = path.join(os.tmpdir(), `reels_bg_${generateId()}`);
+    const settings = require('./settings');
+    const framesDir = path.join(settings.getSecureTmpDir(), `reels_bg_${generateId()}`);
     fs.mkdirSync(framesDir, { recursive: true });
 
     const isImage = isImageMedia(backgroundPath);
@@ -195,11 +196,13 @@ function startSession(opts) {
         width = 1080, height = 1920, fps = 30,
         outputPath, voicePath, voiceVolume = 1.0,
         bgVolume = 0.1, backgroundPath, bgHasAudio = false,
+        bgmPath = '', bgmVolume = 0,
     } = opts;
 
     const sessionId = generateId();
     const ffmpeg = findFFmpeg();
-    const tempVideo = path.join(os.tmpdir(), `reels_wysiwyg_${sessionId}.mp4`);
+    const settings = require('./settings');
+    const tempVideo = path.join(settings.getSecureTmpDir(), `reels_wysiwyg_${sessionId}.mp4`);
 
     const args = [
         '-y',
@@ -222,6 +225,7 @@ function startSession(opts) {
     const session = {
         id: sessionId, proc, tempVideo, outputPath,
         voicePath, voiceVolume, bgVolume, backgroundPath, bgHasAudio,
+        bgmPath, bgmVolume,
         width, height, fps,
         stderr: '', frameCount: 0, bytesWritten: 0,
         closed: false, encoderExited: false, encoderExitCode: null,
@@ -313,20 +317,42 @@ async function finishSession(sessionId) {
 
 async function mixAudio(session) {
     const ffmpeg = findFFmpeg();
-    const { tempVideo, outputPath, voicePath, voiceVolume, bgVolume, backgroundPath, bgHasAudio } = session;
+    const { tempVideo, outputPath, voicePath, voiceVolume, bgVolume, backgroundPath, bgHasAudio, bgmPath, bgmVolume } = session;
 
     const outDir = path.dirname(outputPath);
     if (!fs.existsSync(outDir)) fs.mkdirSync(outDir, { recursive: true });
+
+    // 检测 BGM 是否有效
+    const hasBgm = bgmPath && fs.existsSync(bgmPath) && bgmVolume > 0.001;
 
     let args;
 
     if (!voicePath) {
         // 无配音：用 ffprobe 检测背景是否真有音频轨道
         const bgReallyHasAudio = backgroundPath && fs.existsSync(backgroundPath) && hasAudioTrack(backgroundPath);
-        if (bgReallyHasAudio) {
+
+        if (bgReallyHasAudio && hasBgm) {
+            // 背景音频 + BGM
+            console.log('[WYSIWYG] 无配音，混合背景音频 + BGM');
+            args = ['-y', '-i', tempVideo,
+                '-stream_loop', '-1', '-i', backgroundPath,
+                '-stream_loop', '-1', '-i', bgmPath,
+                '-filter_complex',
+                `[1:a]volume=${(bgVolume || 0.1).toFixed(3)}[bg];[2:a]volume=${bgmVolume.toFixed(3)}[bgm];[bg][bgm]amix=inputs=2:duration=first:dropout_transition=0[aout]`,
+                '-map', '0:v', '-map', '[aout]',
+                '-c:v', 'copy', '-c:a', 'aac', '-b:a', '192k', '-shortest', '-movflags', '+faststart', outputPath];
+        } else if (bgReallyHasAudio) {
             console.log('[WYSIWYG] 无配音，提取背景音频');
             args = ['-y', '-i', tempVideo, '-stream_loop', '-1', '-i', backgroundPath,
                 '-filter_complex', `[1:a]volume=${(bgVolume || 0.1).toFixed(3)}[aout]`,
+                '-map', '0:v', '-map', '[aout]',
+                '-c:v', 'copy', '-c:a', 'aac', '-b:a', '192k', '-shortest', '-movflags', '+faststart', outputPath];
+        } else if (hasBgm) {
+            // 只有 BGM，无背景音频
+            console.log('[WYSIWYG] 无配音，仅 BGM');
+            args = ['-y', '-i', tempVideo,
+                '-stream_loop', '-1', '-i', bgmPath,
+                '-filter_complex', `[1:a]volume=${bgmVolume.toFixed(3)}[aout]`,
                 '-map', '0:v', '-map', '[aout]',
                 '-c:v', 'copy', '-c:a', 'aac', '-b:a', '192k', '-shortest', '-movflags', '+faststart', outputPath];
         } else {
@@ -337,11 +363,46 @@ async function mixAudio(session) {
     } else {
         args = ['-y', '-i', tempVideo, '-i', voicePath];
 
-        if (bgHasAudio && backgroundPath && fs.existsSync(backgroundPath)) {
+        // 计算输入索引：0=tempVideo, 1=voicePath, 后续可能有 backgroundPath 和 bgmPath
+        let nextInputIdx = 2;
+        const bgInputIdx = (bgHasAudio && backgroundPath && fs.existsSync(backgroundPath)) ? nextInputIdx : -1;
+        if (bgInputIdx >= 0) {
             args.push('-stream_loop', '-1', '-i', backgroundPath);
+            nextInputIdx++;
+        }
+        const bgmInputIdx = hasBgm ? nextInputIdx : -1;
+        if (bgmInputIdx >= 0) {
+            args.push('-stream_loop', '-1', '-i', bgmPath);
+            nextInputIdx++;
+        }
+
+        // 构建音频 filter
+        if (bgInputIdx >= 0 || bgmInputIdx >= 0) {
+            let filterParts = [];
+            let mixLabels = [];
+
+            // 配音
+            filterParts.push(`[1:a]volume=${voiceVolume.toFixed(3)}[voice]`);
+            mixLabels.push('[voice]');
+
+            // 背景音频
+            if (bgInputIdx >= 0) {
+                filterParts.push(`[${bgInputIdx}:a]volume=${bgVolume.toFixed(3)}[bg]`);
+                mixLabels.push('[bg]');
+            }
+
+            // BGM
+            if (bgmInputIdx >= 0) {
+                filterParts.push(`[${bgmInputIdx}:a]volume=${bgmVolume.toFixed(3)}[bgm]`);
+                mixLabels.push('[bgm]');
+            }
+
+            filterParts.push(
+                `${mixLabels.join('')}amix=inputs=${mixLabels.length}:duration=shortest:dropout_transition=0[aout]`
+            );
+
             args.push(
-                '-filter_complex',
-                `[1:a]volume=${voiceVolume.toFixed(3)}[voice];[2:a]volume=${bgVolume.toFixed(3)}[bg];[voice][bg]amix=inputs=2:duration=shortest:dropout_transition=0[aout]`,
+                '-filter_complex', filterParts.join(';'),
                 '-map', '0:v', '-map', '[aout]',
             );
         } else {
@@ -356,7 +417,7 @@ async function mixAudio(session) {
         args.push('-c:v', 'copy', '-c:a', 'aac', '-b:a', '192k', '-shortest', '-movflags', '+faststart', outputPath);
     }
 
-    console.log(`[WYSIWYG] 混合音频...`);
+    console.log(`[WYSIWYG] 混合音频... ${hasBgm ? '(含 BGM)' : ''}`);
     return new Promise((resolve, reject) => {
         const proc = spawn(ffmpeg, args, { stdio: ['ignore', 'ignore', 'pipe'] });
         let err = '';

@@ -7,6 +7,7 @@ const { ipcMain } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const os = require('os');
+const crypto = require('crypto');
 
 // 服务模块
 const ffmpegService = require('./services/ffmpeg');
@@ -33,9 +34,9 @@ function registerAPIHandlers() {
             const result = await routeAPI(endpoint, data || {});
             return { success: true, data: result };
         } catch (error) {
-            const safeObj = error.message ? error.message.replace(/sk_[a-zA-Z0-9]{32,}/g, 'sk_***') : 'Unknown error';
-            console.error(`[API Error] ${endpoint}:`, safeObj);
-            return { success: false, error: safeObj };
+            const safeMsg = String(error.message || 'Unknown error').replace(/[a-zA-Z0-9_-]{20,}/g, '***');
+            console.error(`[API Error] ${endpoint}: request failed`);
+            return { success: false, error: safeMsg };
         }
     });
 
@@ -45,9 +46,9 @@ function registerAPIHandlers() {
             const result = await routeUpload(endpoint, fileBuffer, fileName, formData || {});
             return { success: true, data: result };
         } catch (error) {
-            const safeObj = error.message ? error.message.replace(/sk_[a-zA-Z0-9]{32,}/g, 'sk_***') : 'Unknown error';
-            console.error(`[Upload Error] ${endpoint}:`, safeObj);
-            return { success: false, error: safeObj };
+            const safeMsg = String(error.message || 'Unknown error').replace(/[a-zA-Z0-9_-]{20,}/g, '***');
+            console.error(`[Upload Error] ${endpoint}: request failed`);
+            return { success: false, error: safeMsg };
         }
     });
 }
@@ -341,7 +342,7 @@ async function routeAPI(endpoint, data) {
 
         case 'media/batch-thumbnail': {
             if (!data.files || data.files.length === 0) throw new Error('缺少文件列表');
-            const outDir = data.output_dir || path.join(os.tmpdir(), 'thumbnails');
+            const outDir = data.output_dir || settingsService.getSecureTmpDir('thumbnails');
             const results = await ffmpegService.batchThumbnail(
                 data.files, outDir,
                 data.format || 'jpg',
@@ -388,7 +389,7 @@ async function routeAPI(endpoint, data) {
 
             // 构建日志路径
             const fileName = path.parse(audioPath).name;
-            const logDir = path.join(os.tmpdir(), 'pymediatools_log');
+            const logDir = settingsService.getSecureTmpDir('pymediatools_log');
             fs.mkdirSync(logDir, { recursive: true });
             const jsonPath = path.join(logDir, `${currentLanguage}_${fileName}_audio_text_whittime.json`);
             const txtPath = path.join(logDir, `${currentLanguage}_${fileName}_finally.txt`);
@@ -396,6 +397,12 @@ async function routeAPI(endpoint, data) {
             // JSON 文件输入
             let generationSubtitleArray;
             let generationSubtitleText;
+
+            // 强制重新转录时，删除缓存文件
+            if (data.force) {
+                try { if (fs.existsSync(jsonPath)) fs.unlinkSync(jsonPath); } catch { }
+                try { if (fs.existsSync(txtPath)) fs.unlinkSync(txtPath); } catch { }
+            }
 
             if (audioPath.toLowerCase().endsWith('.json')) {
                 // 直接读取 JSON 结果
@@ -430,12 +437,12 @@ async function routeAPI(endpoint, data) {
 
             // 如果提供了原文本，执行完整对齐
             if (data.source_text) {
-                const sourceTextPath = path.join(os.tmpdir(), `source_${Date.now()}.txt`);
+                const sourceTextPath = settingsService.secureTmpFile('source', '.txt');
                 fs.writeFileSync(sourceTextPath, data.source_text, 'utf-8');
 
                 const translateTextDict = {};
                 if (data.translate_text) {
-                    const translatePath = path.join(os.tmpdir(), `translate_${Date.now()}.txt`);
+                    const translatePath = settingsService.secureTmpFile('translate', '.txt');
                     fs.writeFileSync(translatePath, data.translate_text, 'utf-8');
                     translateTextDict['翻译文本'] = {
                         filename: '翻译文本',
@@ -542,7 +549,7 @@ async function routeAPI(endpoint, data) {
         case 'file/download-zip':
         case 'subtitle/download-zip': {
             if (!data.files || data.files.length === 0) throw new Error('缺少文件列表');
-            const zipPath = path.join(os.tmpdir(), `download_${Date.now()}.zip`);
+            const zipPath = settingsService.secureTmpFile('download', '.zip');
             await settingsService.createZip(data.files, zipPath);
             return { message: '打包完成', zip_path: zipPath };
         }
@@ -629,8 +636,8 @@ async function routeUpload(endpoint, fileBuffer, fileName, formData) {
 
         case 'subtitle/generate-with-file': {
             // 保存临时文件
-            const tempDir = os.tmpdir();
-            const tempPath = path.join(tempDir, `batch_${Date.now()}_${fileName}`);
+            const tempDir = settingsService.getSecureTmpDir();
+            const tempPath = path.join(tempDir, `batch_${crypto.randomUUID()}_${fileName}`);
             fs.writeFileSync(tempPath, Buffer.from(fileBuffer));
 
             try {
@@ -655,7 +662,7 @@ async function routeUpload(endpoint, fileBuffer, fileName, formData) {
 
                 // 构建日志路径
                 const baseName = path.parse(fileName).name;
-                const logDir = path.join(os.tmpdir(), 'pymediatools_log');
+                const logDir = settingsService.getSecureTmpDir('pymediatools_log');
                 fs.mkdirSync(logDir, { recursive: true });
                 const jsonPath = path.join(logDir, `${currentLanguage}_${baseName}_audio_text_whittime.json`);
                 const txtPath = path.join(logDir, `${currentLanguage}_${baseName}_finally.txt`);
@@ -667,14 +674,14 @@ async function routeUpload(endpoint, fileBuffer, fileName, formData) {
                 );
 
                 // 写入原文本到临时文件
-                const sourceTextPath = path.join(os.tmpdir(), `source_upload_${Date.now()}.txt`);
+                const sourceTextPath = settingsService.secureTmpFile('source_upload', '.txt');
                 fs.writeFileSync(sourceTextPath, sourceText, 'utf-8');
                 const sourceTextWithInfo = subtitleUtils.readTextWithGoogleDoc(sourceTextPath);
 
                 // 翻译文本
                 const translateTextDict = {};
                 if (translateText) {
-                    const translatePath = path.join(os.tmpdir(), `translate_upload_${Date.now()}.txt`);
+                    const translatePath = settingsService.secureTmpFile('translate_upload', '.txt');
                     fs.writeFileSync(translatePath, translateText, 'utf-8');
                     translateTextDict['翻译文本'] = {
                         filename: '翻译文本',

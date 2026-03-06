@@ -3,6 +3,8 @@
  */
 const { autoUpdater } = require('electron-updater');
 const { ipcMain, dialog } = require('electron');
+const fs = require('fs');
+const path = require('path');
 
 let mainWindow = null;
 let log = console.log;
@@ -10,6 +12,12 @@ let log = console.log;
 function initAutoUpdater(win, logFn) {
     mainWindow = win;
     if (logFn) log = logFn;
+
+    const appUpdateYml = path.join(process.resourcesPath || '', 'app-update.yml');
+    if (!fs.existsSync(appUpdateYml)) {
+        log('[Updater] 未检测到 app-update.yml，跳过自动更新初始化');
+        return;
+    }
 
     // 配置
     autoUpdater.autoDownload = false;      // 不自动下载，先提示用户

@@ -6,6 +6,7 @@ const { spawn, execFile } = require('child_process');
 const path = require('path');
 const fs = require('fs');
 const os = require('os');
+const crypto = require('crypto');
 
 // 超时默认值
 const DEFAULT_TIMEOUT = 600000; // 10 分钟
@@ -480,9 +481,10 @@ function isImageMedia(filePath) {
 
 function escapeAssPathForFilter(assPath) {
     // Normalize all backslashes to forward slashes, then escape
-    // colons and single-quotes for FFmpeg's libass subtitle filter.
+    // remaining backslashes, colons and single-quotes for FFmpeg's libass subtitle filter.
     const normalized = String(assPath || '').split('\\').join('/');
     return normalized
+        .replace(/\\/g, '\\\\')
         .replace(/:/g, '\\:')
         .replace(/'/g, "'\\''");
 }
@@ -611,6 +613,8 @@ async function composeReel({
     loopFadeDur = DEFAULT_LOOP_FADE_DUR,
     voiceVolume = DEFAULT_VOICE_VOLUME,
     bgVolume = DEFAULT_BG_VOLUME,
+    bgmPath = '',
+    bgmVolume = 0,
     forcePortrait = true,
     targetWidth = 1080,
     targetHeight = 1920,
@@ -645,7 +649,8 @@ async function composeReel({
         console.warn(`[composeReel] 对齐 ASS PlayRes 失败，继续使用原始 ASS: ${e.message}`);
     }
 
-    const assPath = path.join(os.tmpdir(), `reels_compose_${Date.now()}_${Math.random().toString(36).slice(2, 8)}.ass`);
+    const settings = require('./settings');
+    const assPath = settings.secureTmpFile('reels_compose', '.ass');
     fs.writeFileSync(assPath, assFinal, 'utf-8');
 
     let vcodec = 'libx264';
@@ -673,6 +678,9 @@ async function composeReel({
     const bgGain = sanitizeVolumeGain(bgVolume, DEFAULT_BG_VOLUME);
     const needBgMix = !imageBackground && bgGain > 0;
     const hasBgMixAudio = needBgMix ? await hasAudioStream(backgroundPath) : false;
+    // BGM support
+    const hasBgm = bgmPath && fs.existsSync(bgmPath) && parseFloat(bgmVolume) > 0.001;
+    const bgmGain = hasBgm ? sanitizeVolumeGain(bgmVolume, 0) : 0;
 
     let usingFadeLoop = false;
     if (fadeEnabled) {
@@ -691,10 +699,16 @@ async function composeReel({
                 args.push('-i', backgroundPath);
             }
             const bgAudioInputIdx = hasBgMixAudio ? segCount : -1;
-            const audioInputIdx = hasBgMixAudio ? (segCount + 1) : segCount;
+            let nextIdx = hasBgMixAudio ? segCount + 1 : segCount;
             if (hasBgMixAudio) {
                 args.push('-stream_loop', '-1', '-i', backgroundPath);
             }
+            const bgmInputIdx = hasBgm ? nextIdx : -1;
+            if (hasBgm) {
+                args.push('-stream_loop', '-1', '-i', bgmPath);
+                nextIdx++;
+            }
+            const audioInputIdx = nextIdx;
             args.push('-i', voicePath);
 
             const step = bgDuration - fadeDuration;
@@ -704,7 +718,6 @@ async function composeReel({
             for (let i = 1; i < segCount; i++) {
                 const inLabel = `v${i}`;
                 const outLabel = i === segCount - 1 ? 'vxf' : `vx${i}`;
-                // 避免落在边界导致某些素材在转场点出现“空帧”
                 const offset = Math.max(0, (i * step) - 0.01).toFixed(3);
                 filterGraph.push(`[${i}:v]setpts=PTS-STARTPTS[${inLabel}]`);
                 filterGraph.push(
@@ -719,15 +732,24 @@ async function composeReel({
                 filterGraph.push(`[${prevLabel}]${subtitleFilter}[vout]`);
             }
 
+            // Audio mixing (voice + background + BGM)
             let audioMap = `${audioInputIdx}:a:0`;
+            const audioMixLabels = [];
             if (hasBgMixAudio) {
                 filterGraph.push(`[${bgAudioInputIdx}:a]volume=${bgGain.toFixed(3)}[bgmix]`);
-                filterGraph.push(`[${audioInputIdx}:a]volume=${voiceGain.toFixed(3)}[vomix]`);
-                filterGraph.push('[bgmix][vomix]amix=inputs=2:duration=shortest:dropout_transition=0[aout]');
+                audioMixLabels.push('[bgmix]');
+            }
+            filterGraph.push(`[${audioInputIdx}:a]volume=${voiceGain.toFixed(3)}[vomix]`);
+            audioMixLabels.push('[vomix]');
+            if (hasBgm) {
+                filterGraph.push(`[${bgmInputIdx}:a]volume=${bgmGain.toFixed(3)}[bgmmus]`);
+                audioMixLabels.push('[bgmmus]');
+            }
+            if (audioMixLabels.length >= 2) {
+                filterGraph.push(`${audioMixLabels.join('')}amix=inputs=${audioMixLabels.length}:duration=shortest:dropout_transition=0[aout]`);
                 audioMap = '[aout]';
             } else if (Math.abs(voiceGain - 1.0) > 0.001) {
-                filterGraph.push(`[${audioInputIdx}:a]volume=${voiceGain.toFixed(3)}[aout]`);
-                audioMap = '[aout]';
+                audioMap = '[vomix]';
             }
 
             args.push(
@@ -748,16 +770,31 @@ async function composeReel({
             args.push('-stream_loop', '-1', '-i', backgroundPath);
         }
         args.push('-i', voicePath);
-        const needAudioFilter = hasBgMixAudio || Math.abs(voiceGain - 1.0) > 0.001;
+        // BGM input (index 2: 0=bg, 1=voice)
+        let bgmSimpleIdx = -1;
+        if (hasBgm) {
+            bgmSimpleIdx = 2;
+            args.push('-stream_loop', '-1', '-i', bgmPath);
+        }
+        const needAudioFilter = hasBgMixAudio || hasBgm || Math.abs(voiceGain - 1.0) > 0.001;
         if (needAudioFilter) {
             const vf = forcePortrait ? `${portraitCoverFilter},${subtitleFilter}` : subtitleFilter;
             const filterGraph = [`[0:v]${vf}[vout]`];
+            const mixLabels = [];
             if (hasBgMixAudio) {
                 filterGraph.push(`[0:a]volume=${bgGain.toFixed(3)}[bgmix]`);
-                filterGraph.push(`[1:a]volume=${voiceGain.toFixed(3)}[vomix]`);
-                filterGraph.push('[bgmix][vomix]amix=inputs=2:duration=shortest:dropout_transition=0[aout]');
+                mixLabels.push('[bgmix]');
+            }
+            filterGraph.push(`[1:a]volume=${voiceGain.toFixed(3)}[vomix]`);
+            mixLabels.push('[vomix]');
+            if (hasBgm && bgmSimpleIdx >= 0) {
+                filterGraph.push(`[${bgmSimpleIdx}:a]volume=${bgmGain.toFixed(3)}[bgmmus]`);
+                mixLabels.push('[bgmmus]');
+            }
+            if (mixLabels.length >= 2) {
+                filterGraph.push(`${mixLabels.join('')}amix=inputs=${mixLabels.length}:duration=shortest:dropout_transition=0[aout]`);
             } else {
-                filterGraph.push(`[1:a]volume=${voiceGain.toFixed(3)}[aout]`);
+                filterGraph.push('[vomix]anull[aout]');
             }
             args.push(
                 '-filter_complex', filterGraph.join(';'),
@@ -1086,6 +1123,7 @@ function buildSegments(cutPoints) {
 }
 
 module.exports = {
+    resolveCommand,
     runCommand,
     getDuration,
     getFrameRate,

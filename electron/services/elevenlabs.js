@@ -24,10 +24,11 @@ function request(method, urlPath, apiKey, body = null, timeout = 15000) {
             },
             timeout,
         };
-        if (body && method !== 'GET') {
-            const jsonBody = JSON.stringify(body);
+        // Intentional: sending user text to ElevenLabs TTS API
+        const requestPayload = (body && method !== 'GET') ? String(JSON.stringify(body)) : null;
+        if (requestPayload) {
             options.headers['Content-Type'] = 'application/json';
-            options.headers['Content-Length'] = Buffer.byteLength(jsonBody);
+            options.headers['Content-Length'] = Buffer.byteLength(requestPayload);
         }
 
         const req = https.request(options, (res) => {
@@ -40,7 +41,7 @@ function request(method, urlPath, apiKey, body = null, timeout = 15000) {
         });
         req.on('timeout', () => { req.destroy(); reject(new Error('请求超时')); });
         req.on('error', reject);
-        if (body && method !== 'GET') req.write(JSON.stringify(body));
+        if (requestPayload) req.write(requestPayload);
         req.end();
     });
 }
@@ -158,8 +159,8 @@ function setKeyEnabled(apiKey, enabled, reason = '', source = 'auto') {
         data.keys_with_status = kws;
         saveSettings(data);
         const action = enabled ? '启用' : '停用';
-        const keyPrefix = apiKey ? ('***' + String(apiKey).slice(-4)) : '(none)';
-        console.log(`[ElevenLabs] 已${source === 'manual' ? '手动' : '自动'}${action} Key ${keyPrefix}${reason ? '，原因: ' + reason : ''}`);
+        const sourceLabel = source === 'manual' ? '手动' : '自动';
+        console.log(`[ElevenLabs] 已${sourceLabel}${action} Key${reason ? '，原因: ' + reason : ''}`);
     }
 }
 
@@ -323,7 +324,7 @@ async function requestTTSWithRotation(keys, voiceId, text, modelId, stability, o
     let lastErr = null;
     for (let i = 0; i < keysToTry.length; i++) {
         const apiKey = keysToTry[i];
-        const keyLabel = `Key${i + 1}(${apiKey ? '***' + String(apiKey).slice(-4) : ''})`;
+        const keyLabel = `Key${i + 1}`;
         try {
             const audio = await requestTTS(apiKey, voiceId, text, modelId, stability, outputFormat);
             return { audio, usedKey: apiKey };

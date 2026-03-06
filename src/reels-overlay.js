@@ -141,6 +141,22 @@ function createTextCardOverlay(opts = {}) {
         body_color: opts.body_color || '#000000',
         body_align: opts.body_align || 'center',
         body_line_spacing: opts.body_line_spacing ?? 6,
+        // ── 结尾 ──
+        footer_text: opts.footer_text ?? '',
+        footer_font_family: opts.footer_font_family || 'Arial',
+        footer_font_weight: opts.footer_font_weight ?? (opts.footer_bold ? 700 : 400),
+        footer_fontsize: opts.footer_fontsize ?? 32,
+        footer_bold: opts.footer_bold || false,
+        footer_italic: opts.footer_italic || false,
+        footer_color: opts.footer_color || '#666666',
+        footer_align: opts.footer_align || 'center',
+        // ── 文字效果 ──
+        text_stroke_color: opts.text_stroke_color || '#000000',
+        text_stroke_width: opts.text_stroke_width ?? 0,
+        text_shadow_color: opts.text_shadow_color || '#000000',
+        text_shadow_blur: opts.text_shadow_blur ?? 0,
+        text_shadow_x: opts.text_shadow_x ?? 0,
+        text_shadow_y: opts.text_shadow_y ?? 0,
         // ── 自动适配 ──
         auto_fit: opts.auto_fit !== false,        // 根据文案长短自动调整蒙版大小
         auto_center_v: opts.auto_center_v ?? true, // 自动垂直居中
@@ -156,6 +172,8 @@ function createTextCardOverlay(opts = {}) {
         title_max_lines: opts.title_max_lines ?? 3,
         min_fontsize: opts.min_fontsize ?? 16,
         fullscreen_mask: opts.fullscreen_mask ?? false,
+        // ── 垂直偏移 ──
+        offset_y: opts.offset_y ?? 0,
         // ── 动画 ──
         transition_preset: opts.transition_preset || 'none',
         transition_duration: opts.transition_duration || 0.35,
@@ -171,19 +189,25 @@ function createTextCardOverlay(opts = {}) {
 // ═══════════════════════════════════════════════════════
 
 const _imageCache = {};
+const _IMAGE_LOADING = { _loading: true }; // sentinel (truthy, prevents re-creation)
 
 /**
  * 加载并缓存图片。
  */
 function _getCachedImage(path) {
     if (!path) return null;
-    if (_imageCache[path]) return _imageCache[path];
+    const cached = _imageCache[path];
+    if (cached === _IMAGE_LOADING) return null;   // still loading
+    if (cached) return cached;                     // loaded Image
 
     const img = new Image();
-    img.crossOrigin = 'anonymous';
-    img.src = path.startsWith('/') ? `file://${path}` : path;
+    // Only set crossOrigin for http(s) — blob: and file: don't need it
+    // and setting it on blob URLs causes CORS failures in Electron
+    if (/^https?:\/\//.test(path)) img.crossOrigin = 'anonymous';
     img.onload = () => { _imageCache[path] = img; };
-    _imageCache[path] = null; // placeholder
+    img.onerror = () => { _imageCache[path] = null; }; // allow retry on error
+    _imageCache[path] = _IMAGE_LOADING;
+    img.src = path.startsWith('/') ? `file://${path}` : path;
     return null;
 }
 
@@ -225,10 +249,11 @@ function drawOverlay(ctx, ov, currentTime = 0, canvasW = 1920, canvasH = 1080) {
         const preset = ov.transition_preset || 'none';
         const dur = parseFloat(ov.transition_duration || 0.35);
         const result = ReelsAnimEngine.computeTransitionParams(currentTime, start, end, preset, dur);
-        transOp = result.opacity;
-        transScale = result.scale;
-        transDx = result.dx;
-        transDy = result.dy;
+        // result is an array: [opacityFactor, scale, dx, dy]
+        transOp = result[0];
+        transScale = result[1];
+        transDx = result[2];
+        transDy = result[3];
     }
 
     ctx.translate(transDx, transDy);
@@ -449,13 +474,30 @@ function _drawTextCardOverlay(ctx, ov, x, y, w, h, canvasW, canvasH, currentTime
     const bodyFamily = ov.body_font_family || 'Arial';
     const bodyFallback = _resolveOverlayFallback(bodyFamily);
 
+    const footerText = ov.footer_text || '';
+    let footerFontSize = ov.footer_fontsize ?? 32;
+    const footerWeight = _resolveOverlayFontWeight(ov.footer_font_weight, ov.footer_bold ? 700 : 400);
+    const footerItalic = ov.footer_italic ? 'italic' : 'normal';
+    const footerFamily = ov.footer_font_family || 'Arial';
+    const footerFallback = _resolveOverlayFallback(footerFamily);
+
+    // Text effects
+    const strokeW = ov.text_stroke_width ?? 0;
+    const strokeC = ov.text_stroke_color || '#000000';
+    const shadowBlur = ov.text_shadow_blur ?? 0;
+    const shadowColor = ov.text_shadow_color || '#000000';
+    const shadowX = ov.text_shadow_x ?? 0;
+    const shadowY = ov.text_shadow_y ?? 0;
+    const hasStroke = strokeW > 0;
+    const hasShadow = shadowBlur > 0 || shadowX !== 0 || shadowY !== 0;
+
     const minFont = ov.min_fontsize ?? 16;
     const maxH = ov.max_height ?? 1400;
     const titleMaxLines = ov.title_max_lines ?? 3;
     const doShrink = ov.auto_shrink && maxH > 0;
 
     // ── 内部测量函数 ──
-    function _measure(tfs, bfs) {
+    function _measure(tfs, bfs, ffs) {
         const tf = `${titleItalic} ${titleWeight} ${tfs}px "${titleFamily}", ${titleFallback}`;
         ctx.font = tf;
         const tLines = titleText ? _wrapText(ctx, titleText, contentW) : [];
@@ -468,37 +510,58 @@ function _drawTextCardOverlay(ctx, ov, x, y, w, h, canvasW, canvasH, currentTime
         const bLineH = bfs * 1.3 + (ov.body_line_spacing ?? 0);
         const bH = bLines.length * bLineH;
 
+        const ff = `${footerItalic} ${footerWeight} ${ffs}px "${footerFamily}", ${footerFallback}`;
+        ctx.font = ff;
+        const fLines = footerText ? _wrapText(ctx, footerText, contentW) : [];
+        const fLineH = ffs * 1.3;
+        const fH = fLines.length * fLineH;
+
         const hasT = tLines.length > 0;
         const hasB = bLines.length > 0;
-        const total = (hasT ? tH : 0) + (hasT && hasB ? gap : 0) + (hasB ? bH : 0) + padT + padB;
-        return { tLines, tLineH, tH, bLines, bLineH, bH, total, tf, bf, hasT, hasB };
+        const hasF = fLines.length > 0;
+        const total = (hasT ? tH : 0)
+            + (hasT && (hasB || hasF) ? gap : 0)
+            + (hasB ? bH : 0)
+            + ((hasB || hasT) && hasF ? gap : 0)
+            + (hasF ? fH : 0)
+            + padT + padB;
+        return { tLines, tLineH, tH, bLines, bLineH, bH, fLines, fLineH, fH, total, tf, bf, ff, hasT, hasB, hasF };
     }
 
     // ── 自动缩放循环 ──
-    let m = _measure(titleFontSize, bodyFontSize);
+    let m = _measure(titleFontSize, bodyFontSize, footerFontSize);
+
+    // 阶段 0: 强制标题行数限制 (不依赖 maxH)
+    while (m.tLines.length > titleMaxLines && titleFontSize > minFont) {
+        titleFontSize = Math.max(minFont, titleFontSize - 2);
+        m = _measure(titleFontSize, bodyFontSize, footerFontSize);
+    }
 
     if (doShrink && m.total > maxH) {
         // 第一阶段: 只缩内容字号
         while (m.total > maxH && bodyFontSize > minFont) {
             bodyFontSize = Math.max(minFont, bodyFontSize - 2);
-            m = _measure(titleFontSize, bodyFontSize);
+            m = _measure(titleFontSize, bodyFontSize, footerFontSize);
         }
-        // 第二阶段: 如果标题超过 titleMaxLines 行，缩标题
-        while (m.total > maxH && m.tLines.length > titleMaxLines && titleFontSize > minFont) {
-            titleFontSize = Math.max(minFont, titleFontSize - 2);
-            m = _measure(titleFontSize, bodyFontSize);
+        // 缩小结尾字号
+        while (m.total > maxH && footerFontSize > minFont) {
+            footerFontSize = Math.max(minFont, footerFontSize - 2);
+            m = _measure(titleFontSize, bodyFontSize, footerFontSize);
         }
-        // 第三阶段: 都缩
+        // 第二阶段: 都缩
         while (m.total > maxH && (titleFontSize > minFont || bodyFontSize > minFont)) {
             if (bodyFontSize > minFont) bodyFontSize = Math.max(minFont, bodyFontSize - 1);
             if (titleFontSize > minFont) titleFontSize = Math.max(minFont, titleFontSize - 1);
-            m = _measure(titleFontSize, bodyFontSize);
+            if (footerFontSize > minFont) footerFontSize = Math.max(minFont, footerFontSize - 1);
+            m = _measure(titleFontSize, bodyFontSize, footerFontSize);
         }
     }
 
     const { tLines: titleLines, tLineH: titleLineH, tH: titleH,
         bLines: bodyLines, bLineH: bodyLineH, bH: bodyH,
-        total: autoH, tf: titleFont, bf: bodyFont, hasT: hasTitle, hasB: hasBody } = m;
+        fLines: footerLines, fLineH: footerLineH, fH: footerH,
+        total: autoH, tf: titleFont, bf: bodyFont, ff: footerFont,
+        hasT: hasTitle, hasB: hasBody, hasF: hasFooter } = m;
 
     // ── 计算总高度（自动适配）──
     let cardH = ov.auto_fit ? autoH : (h > 0 ? h : autoH);
@@ -506,9 +569,9 @@ function _drawTextCardOverlay(ctx, ov, x, y, w, h, canvasW, canvasH, currentTime
     if (doShrink && cardH > maxH) cardH = maxH;
     let cardY = y;
 
-    // 自动垂直居中
+    // 自动垂直居中 + 偏移
     if (ov.auto_fit && ov.auto_center_v) {
-        cardY = (canvasH - cardH) / 2;
+        cardY = (canvasH - cardH) / 2 + (ov.offset_y || 0);
     }
 
     // 全屏蒙版模式: 背景铺满画布，但文字区域保持在 cardY/cardH 内
@@ -533,6 +596,34 @@ function _drawTextCardOverlay(ctx, ov, x, y, w, h, canvasW, canvasH, currentTime
         );
         if (inType === 'fade') animOpFactor *= inProgress;
         if (outType === 'fade') animOpFactor *= outProgress;
+
+        // Pop animation
+        if (inType === 'pop' || outType === 'pop') {
+            let popScale = 1;
+            if (inType === 'pop') popScale = Math.min(popScale, ReelsAnimEngine.computePopScale(inProgress));
+            if (outType === 'pop') popScale = Math.min(popScale, ReelsAnimEngine.computePopScale(outProgress));
+            if (popScale < 0.999) {
+                const pcx = x + w / 2, pcy = cardY + cardH / 2;
+                ctx.translate(pcx, pcy);
+                ctx.scale(popScale, popScale);
+                ctx.translate(-pcx, -pcy);
+            }
+        }
+
+        // Slide animation
+        const slideTypes = ['slide_up', 'slide_down', 'slide_left', 'slide_right'];
+        if (slideTypes.includes(inType) || slideTypes.includes(outType)) {
+            let sdx = 0, sdy = 0;
+            if (slideTypes.includes(inType)) {
+                const [dx, dy] = ReelsAnimEngine.computeSlideOffset(inProgress, inType, 120);
+                sdx += dx; sdy += dy;
+            }
+            if (slideTypes.includes(outType)) {
+                const [dx, dy] = ReelsAnimEngine.computeSlideOffset(outProgress, outType, 120);
+                sdx += dx; sdy += dy;
+            }
+            ctx.translate(sdx, sdy);
+        }
     }
     ctx.globalAlpha *= animOpFactor;
 
@@ -554,14 +645,31 @@ function _drawTextCardOverlay(ctx, ov, x, y, w, h, canvasW, canvasH, currentTime
     // 文字区域始终基于 cardY/cardH（受 maxH 约束）
     const textY = cardY;
 
+    // Helper: apply text effects
+    function _applyTextEffects(ctx) {
+        if (hasShadow) {
+            ctx.shadowColor = shadowColor;
+            ctx.shadowBlur = shadowBlur;
+            ctx.shadowOffsetX = shadowX;
+            ctx.shadowOffsetY = shadowY;
+        }
+    }
+
     // ── 绘制标题文字 ──
     if (hasTitle) {
         ctx.save();
         ctx.font = titleFont;
-        ctx.fillStyle = ov.title_color || '#1A1A1A';
+        _applyTextEffects(ctx);
         let ty = textY + padT + titleFontSize * 0.85;
         for (const line of titleLines) {
             const lx = _alignX(ctx, line, x + padL, contentW, ov.title_align || 'center');
+            if (hasStroke) {
+                ctx.strokeStyle = strokeC;
+                ctx.lineWidth = strokeW;
+                ctx.lineJoin = 'round';
+                ctx.strokeText(line, lx, ty);
+            }
+            ctx.fillStyle = ov.title_color || '#1A1A1A';
             ctx.fillText(line, lx, ty);
             ty += titleLineH;
         }
@@ -572,12 +680,43 @@ function _drawTextCardOverlay(ctx, ov, x, y, w, h, canvasW, canvasH, currentTime
     if (hasBody) {
         ctx.save();
         ctx.font = bodyFont;
-        ctx.fillStyle = ov.body_color || '#333333';
+        _applyTextEffects(ctx);
         let by = textY + padT + (hasTitle ? titleH + gap : 0) + bodyFontSize * 0.85;
         for (const line of bodyLines) {
             const lx = _alignX(ctx, line, x + padL, contentW, ov.body_align || 'center');
+            if (hasStroke) {
+                ctx.strokeStyle = strokeC;
+                ctx.lineWidth = strokeW;
+                ctx.lineJoin = 'round';
+                ctx.strokeText(line, lx, by);
+            }
+            ctx.fillStyle = ov.body_color || '#333333';
             ctx.fillText(line, lx, by);
             by += bodyLineH;
+        }
+        ctx.restore();
+    }
+
+    // ── 绘制结尾文字 ──
+    if (hasFooter) {
+        ctx.save();
+        ctx.font = footerFont;
+        _applyTextEffects(ctx);
+        let fy = textY + padT
+            + (hasTitle ? titleH + gap : 0)
+            + (hasBody ? bodyH + gap : 0)
+            + footerFontSize * 0.85;
+        for (const line of footerLines) {
+            const lx = _alignX(ctx, line, x + padL, contentW, ov.footer_align || 'center');
+            if (hasStroke) {
+                ctx.strokeStyle = strokeC;
+                ctx.lineWidth = strokeW;
+                ctx.lineJoin = 'round';
+                ctx.strokeText(line, lx, fy);
+            }
+            ctx.fillStyle = ov.footer_color || '#666666';
+            ctx.fillText(line, lx, fy);
+            fy += footerLineH;
         }
         ctx.restore();
     }

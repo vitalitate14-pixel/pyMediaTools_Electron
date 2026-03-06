@@ -378,7 +378,7 @@ function processDiffsWithAudioPositionsStrong(params) {
             const start = getAllstrings(source.index_in_all);
             const end = getAllstrings(endsource.index_in_all);
 
-            const srtStart = (index === 1) ? formatTime(0) : formatTime(start.audio_start);
+            const srtStart = formatTime(start.audio_start);
             const srtEnd = formatTime(end.audio_end);
 
             let mergeTransContent = '';
@@ -476,6 +476,70 @@ function processDiffsWithAudioPositionsStrong(params) {
  * @param {string}  sourceSrtPath           可选，指定源SRT输出路径
  * @param {string}  fcpxmlPath              可选，指定FCPXML输出路径
  */
+/**
+ * 检测并去除转录文本开头的多余语音（不在用户文案中的部分）
+ * 使用 DMP 模糊匹配找到文案在转录中的起始位置
+ */
+function _trimLeadingExtraSpeech(genArray, genText, cleanedSourceText) {
+    const cleanedGenText = cleanText(genText);
+
+    // 转录文本不比源文本长，无需裁剪
+    if (cleanedGenText.length <= cleanedSourceText.length + 5) return null;
+
+    // 用源文本前 32 字符做探针（match_main 上限 32）
+    const probeLen = Math.min(32, cleanedSourceText.length);
+    const probe = cleanedSourceText.substring(0, probeLen);
+
+    const dmp = new DiffMatchPatch();
+    dmp.Match_Threshold = 0.5;
+    dmp.Match_Distance = cleanedGenText.length;
+    const matchPos = dmp.match_main(cleanedGenText, probe, 0);
+
+    // 探针在开头匹配或匹配失败→无需裁剪
+    if (matchPos <= 3 || matchPos === -1) return null;
+
+    // 统计 matchPos 之前有多少个词（按空格分割）
+    const prefix = cleanedGenText.substring(0, matchPos);
+    const wordsToSkip = prefix.split(/\s+/).filter(w => w).length;
+    if (wordsToSkip <= 0) return null;
+
+    // 在 genArray 中跳过对应数量的词，重建数组和文本
+    let skipped = 0;
+    for (let si = 0; si < genArray.length; si++) {
+        const sentence = genArray[si];
+        for (let wi = 0; wi < sentence.words.length; wi++) {
+            if (skipped >= wordsToSkip) {
+                // 从此处截断，保留后续内容
+                const newArray = [];
+                const restWords = sentence.words.slice(wi);
+                if (restWords.length > 0) {
+                    newArray.push({
+                        audio_start: restWords[0].start != null ? restWords[0].start : sentence.audio_start,
+                        audio_end: sentence.audio_end,
+                        text: restWords.map(w => w.word).join(' '),
+                        words: restWords,
+                    });
+                }
+                for (let ri = si + 1; ri < genArray.length; ri++) {
+                    newArray.push(genArray[ri]);
+                }
+                // 重建纯文本
+                let newText = '';
+                let first = true;
+                for (const s of newArray) {
+                    for (const w of s.words) {
+                        newText += first ? w.word : (' ' + w.word);
+                        first = false;
+                    }
+                }
+                return { array: newArray, text: newText, skippedWords: wordsToSkip };
+            }
+            skipped++;
+        }
+    }
+    return null;
+}
+
 function audioSubtitleSearchDifferentStrong(
     currentLanguage, directory, fileName,
     generationSubtitleArray, generationSubtitleText,
@@ -490,8 +554,19 @@ function audioSubtitleSearchDifferentStrong(
     }
 
     // 清理文本
-    const cleanedGenText = cleanText(generationSubtitleText);
     const cleanedSourceText = cleanText(sourceTextWithNoInfo);
+
+    // === 检测并去除开头多余语音 ===
+    const trimResult = _trimLeadingExtraSpeech(
+        generationSubtitleArray, generationSubtitleText, cleanedSourceText
+    );
+    if (trimResult) {
+        generationSubtitleArray = trimResult.array;
+        generationSubtitleText = trimResult.text;
+        console.log(`[字幕对齐] 检测到开头多余语音，已跳过 ${trimResult.skippedWords} 个词`);
+    }
+
+    const cleanedGenText = cleanText(generationSubtitleText);
 
     // 执行 diff
     const dmp = new DiffMatchPatch();

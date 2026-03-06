@@ -22,6 +22,23 @@ class ReelsOverlayPanel {
     _init() {
         this.container.innerHTML = `
         <div class="rop-panel">
+            <!-- 覆层组预设 (多层) -->
+            <div class="rop-section">
+                <div class="rop-group">
+                    <div class="rop-group-title">📦 覆层组预设</div>
+                    <div style="display:flex;gap:4px;align-items:center;">
+                        <select id="rop-group-preset-select" class="rop-select" style="flex:1;"></select>
+                        <button class="btn btn-secondary rop-btn" id="rop-group-preset-load" style="padding:2px 8px;">加载</button>
+                    </div>
+                    <div style="display:flex;gap:4px;margin-top:4px;">
+                        <button class="btn btn-secondary rop-btn" id="rop-group-preset-save" style="flex:1;">保存</button>
+                        <button class="btn btn-secondary rop-btn" id="rop-group-preset-del" style="flex:1;">删除</button>
+                        <button class="btn btn-secondary rop-btn" id="rop-group-preset-import" style="flex:1;">导入</button>
+                        <button class="btn btn-secondary rop-btn" id="rop-group-preset-export" style="flex:1;">导出</button>
+                    </div>
+                </div>
+            </div>
+
             <!-- 覆层列表 -->
             <div class="rop-section">
                 <div class="rop-header">
@@ -42,14 +59,29 @@ class ReelsOverlayPanel {
 
                 <!-- 变换 -->
                 <div class="rop-group">
-                    <div class="rop-group-title">变换</div>
-                    <div class="rop-grid">
-                        <label>X</label><input type="number" id="rop-x" class="rop-input" step="1">
-                        <label>Y</label><input type="number" id="rop-y" class="rop-input" step="1">
-                        <label>宽</label><input type="number" id="rop-w" class="rop-input" step="1">
-                        <label>高</label><input type="number" id="rop-h" class="rop-input" step="1">
+                    <div style="display:flex;justify-content:space-between;align-items:center;gap:6px;">
+                        <div class="rop-group-title" style="margin:0;">变换</div>
+                        <div style="display:flex;gap:4px;">
+                            <button class="rop-reset-all" id="rop-reset-transform" title="恢复默认位置和大小">↺ 默认</button>
+                            <button class="rop-reset-all" id="rop-fill-screen" title="一键铺满画布">📐 全屏填充</button>
+                        </div>
+                    </div>
+                    <div class="rop-grid" style="margin-top:6px;">
+                        <label>位置X</label><input type="number" id="rop-x" class="rop-input" step="1">
+                        <label>位置Y</label><input type="number" id="rop-y" class="rop-input" step="1">
+                        <label id="rop-wh-label-w">宽度</label><input type="number" id="rop-w" class="rop-input" step="1">
+                        <label id="rop-wh-label-h">高度</label><input type="number" id="rop-h" class="rop-input" step="1">
                         <label>旋转</label><input type="number" id="rop-rotation" class="rop-input" min="-360" max="360" value="0">
-                        <label>不透明</label><input type="range" id="rop-opacity" class="rop-range" min="0" max="100" value="100">
+                        <label>不透明</label>
+                        <div style="display:flex;align-items:center;gap:6px;">
+                            <input type="range" id="rop-opacity" class="rop-range" min="0" max="100" value="100" style="flex:1;">
+                            <span id="rop-opacity-val" style="min-width:36px;text-align:right;font-size:12px;color:#aaa;">100%</span>
+                        </div>
+                        <label id="rop-scale-label" style="display:none;">缩放%</label>
+                        <div id="rop-scale-wrap" style="display:none;align-items:center;gap:6px;">
+                            <input type="range" id="rop-scale" class="rop-range" min="10" max="1000" value="100" style="flex:1;">
+                            <span id="rop-scale-val" style="min-width:44px;text-align:right;font-size:12px;color:#aaa;">100%</span>
+                        </div>
                     </div>
                 </div>
 
@@ -92,7 +124,6 @@ class ReelsOverlayPanel {
                 <div id="rop-image-props" class="rop-group" style="display:none;">
                     <div class="rop-group-title">图片</div>
                     <div class="rop-grid">
-                        <label>缩放</label><input type="range" id="rop-scale" class="rop-range" min="10" max="300" value="100">
                         <label>水平翻转</label><input type="checkbox" id="rop-flip-h">
                         <label>垂直翻转</label><input type="checkbox" id="rop-flip-v">
                         <label>混合模式</label>
@@ -143,18 +174,10 @@ class ReelsOverlayPanel {
                         </div>
                         <label>全屏蒙版</label><input type="checkbox" id="rop-fullscreen-mask" class="rop-defaultable" data-default="false">
                     </div>
-                    <div class="rop-group-title" style="margin-top:8px;">⬰ 圆角 (四边独立)</div>
+                    <div class="rop-group-title" style="margin-top:8px;">⬰ 圆角</div>
                     <div class="rop-grid">
-                        <label>左上</label>
-                        <div class="rop-slider-combo"><input type="range" id="rop-radius-tl" class="rop-range rop-defaultable" data-default="33" min="0" max="200" value="33"><input type="number" class="rop-num-readout" data-link="rop-radius-tl" min="0" max="200" value="16"><button class="rop-reset-btn" data-target="rop-radius-tl" title="恢复默认">↺</button></div>
-                        <label>右上</label>
-                        <div class="rop-slider-combo"><input type="range" id="rop-radius-tr" class="rop-range rop-defaultable" data-default="33" min="0" max="200" value="33"><input type="number" class="rop-num-readout" data-link="rop-radius-tr" min="0" max="200" value="16"><button class="rop-reset-btn" data-target="rop-radius-tr" title="恢复默认">↺</button></div>
-                        <label>左下</label>
-                        <div class="rop-slider-combo"><input type="range" id="rop-radius-bl" class="rop-range rop-defaultable" data-default="33" min="0" max="200" value="33"><input type="number" class="rop-num-readout" data-link="rop-radius-bl" min="0" max="200" value="16"><button class="rop-reset-btn" data-target="rop-radius-bl" title="恢复默认">↺</button></div>
-                        <label>右下</label>
-                        <div class="rop-slider-combo"><input type="range" id="rop-radius-br" class="rop-range rop-defaultable" data-default="33" min="0" max="200" value="33"><input type="number" class="rop-num-readout" data-link="rop-radius-br" min="0" max="200" value="16"><button class="rop-reset-btn" data-target="rop-radius-br" title="恢复默认">↺</button></div>
-                        <label>全部</label>
-                        <div class="rop-slider-combo"><input type="range" id="rop-radius-all" class="rop-range rop-defaultable" data-default="33" min="0" max="200" value="33"><input type="number" class="rop-num-readout" data-link="rop-radius-all" min="0" max="200" value="16"><button class="rop-reset-btn" data-target="rop-radius-all" title="恢复默认">↺</button></div>
+                        <label>圆角</label>
+                        <div class="rop-slider-combo"><input type="range" id="rop-radius-all" class="rop-range rop-defaultable" data-default="33" min="0" max="200" value="33"><input type="number" class="rop-num-readout" data-link="rop-radius-all" min="0" max="200" value="33"><button class="rop-reset-btn" data-target="rop-radius-all" title="恢复默认">↺</button></div>
                     </div>
                     <div class="rop-group-title" style="margin-top:8px;">🔤 标题</div>
                     <textarea id="rop-title-text" class="rop-textarea" rows="2" placeholder="标题文字"></textarea>
@@ -201,12 +224,48 @@ class ReelsOverlayPanel {
                             <option value="center">居中</option><option value="left">左对齐</option><option value="right">右对齐</option>
                         </select>
                     </div>
+                    <div class="rop-group-title" style="margin-top:8px;">📎 结尾</div>
+                    <textarea id="rop-footer-text" class="rop-textarea" rows="2" placeholder="结尾文字（可选）"></textarea>
+                    <div class="rop-grid">
+                        <label>字体</label>
+                        <select id="rop-footer-font" class="rop-select rop-defaultable" data-default="Arial">
+                        </select>
+                        <label>字号</label>
+                        <div class="rop-slider-combo"><input type="range" id="rop-footer-fontsize" class="rop-range rop-defaultable" data-default="32" min="8" max="200" value="32"><input type="number" class="rop-num-readout" data-link="rop-footer-fontsize" min="8" max="200" value="32"><button class="rop-reset-btn" data-target="rop-footer-fontsize" title="恢复默认">↺</button></div>
+                        <label>颜色</label><input type="color" id="rop-footer-color" class="rop-color rop-defaultable" data-default="#666666" value="#666666">
+                        <label>粗体</label><input type="checkbox" id="rop-footer-bold" class="rop-defaultable" data-default="false">
+                        <label>字重</label>
+                        <select id="rop-footer-weight" class="rop-select rop-defaultable" data-default="400">
+                            <option value="100">Thin</option><option value="200">ExtraLight</option><option value="300">Light</option>
+                            <option value="400" selected>Regular</option><option value="500">Medium</option><option value="600">SemiBold</option>
+                            <option value="700">Bold</option><option value="800">ExtraBold</option><option value="900">Black</option>
+                        </select>
+                        <label>对齐</label>
+                        <select id="rop-footer-align" class="rop-select rop-defaultable" data-default="center">
+                            <option value="center">居中</option><option value="left">左对齐</option><option value="right">右对齐</option>
+                        </select>
+                    </div>
+                    <div class="rop-group-title" style="margin-top:8px;">✨ 文字效果</div>
+                    <div class="rop-grid">
+                        <label>描边颜色</label><input type="color" id="rop-text-stroke-color" class="rop-color rop-defaultable" data-default="#000000" value="#000000">
+                        <label>描边宽度</label>
+                        <div class="rop-slider-combo"><input type="range" id="rop-text-stroke-width" class="rop-range rop-defaultable" data-default="0" min="0" max="20" value="0"><input type="number" class="rop-num-readout" data-link="rop-text-stroke-width" min="0" max="20" value="0"><button class="rop-reset-btn" data-target="rop-text-stroke-width" title="恢复默认">↺</button></div>
+                        <label>阴影颜色</label><input type="color" id="rop-text-shadow-color" class="rop-color rop-defaultable" data-default="#000000" value="#000000">
+                        <label>阴影模糊</label>
+                        <div class="rop-slider-combo"><input type="range" id="rop-text-shadow-blur" class="rop-range rop-defaultable" data-default="0" min="0" max="30" value="0"><input type="number" class="rop-num-readout" data-link="rop-text-shadow-blur" min="0" max="30" value="0"><button class="rop-reset-btn" data-target="rop-text-shadow-blur" title="恢复默认">↺</button></div>
+                        <label>阴影偏移X</label>
+                        <div class="rop-slider-combo"><input type="range" id="rop-text-shadow-x" class="rop-range rop-defaultable" data-default="2" min="-20" max="20" value="2"><input type="number" class="rop-num-readout" data-link="rop-text-shadow-x" min="-20" max="20" value="2"><button class="rop-reset-btn" data-target="rop-text-shadow-x" title="恢复默认">↺</button></div>
+                        <label>阴影偏移Y</label>
+                        <div class="rop-slider-combo"><input type="range" id="rop-text-shadow-y" class="rop-range rop-defaultable" data-default="2" min="-20" max="20" value="2"><input type="number" class="rop-num-readout" data-link="rop-text-shadow-y" min="-20" max="20" value="2"><button class="rop-reset-btn" data-target="rop-text-shadow-y" title="恢复默认">↺</button></div>
+                    </div>
                     <div class="rop-group-title" style="margin-top:8px;">📐 布局</div>
                     <div class="rop-grid">
                         <label>蒙版宽度</label>
                         <div class="rop-slider-combo"><input type="range" id="rop-card-width" class="rop-range rop-defaultable" data-default="910" min="100" max="1080" value="910"><input type="number" class="rop-num-readout" data-link="rop-card-width" min="100" max="1080" value="910"><button class="rop-reset-btn" data-target="rop-card-width" title="恢复默认">↺</button></div>
                         <label>自动适配</label><input type="checkbox" id="rop-auto-fit" class="rop-defaultable" data-default="true" checked>
                         <label>垂直居中</label><input type="checkbox" id="rop-auto-center" class="rop-defaultable" data-default="true" checked>
+                        <label>垂直偏移</label>
+                        <div class="rop-slider-combo"><input type="range" id="rop-offset-y" class="rop-range rop-defaultable" data-default="0" min="-500" max="500" value="0"><input type="number" class="rop-num-readout" data-link="rop-offset-y" min="-500" max="500" value="0"><button class="rop-reset-btn" data-target="rop-offset-y" title="恢复默认">↺</button></div>
                         <label>标题间距</label>
                         <div class="rop-slider-combo"><input type="range" id="rop-title-body-gap" class="rop-range rop-defaultable" data-default="42" min="0" max="100" value="42"><input type="number" class="rop-num-readout" data-link="rop-title-body-gap" min="0" max="100" value="42"><button class="rop-reset-btn" data-target="rop-title-body-gap" title="恢复默认">↺</button></div>
                         <label>上边距</label>
@@ -264,12 +323,49 @@ class ReelsOverlayPanel {
         this.container.querySelector('#rop-duplicate').addEventListener('click', () => this._duplicateOverlay());
         this.container.querySelector('#rop-delete').addEventListener('click', () => this._deleteOverlay());
 
+        // Overlay group presets
+        this.container.querySelector('#rop-group-preset-save')?.addEventListener('click', () => this._saveOverlayGroupPreset());
+        this.container.querySelector('#rop-group-preset-load')?.addEventListener('click', () => this._loadOverlayGroupPreset());
+        this.container.querySelector('#rop-group-preset-del')?.addEventListener('click', () => this._deleteOverlayGroupPreset());
+        this.container.querySelector('#rop-group-preset-import')?.addEventListener('click', () => this._importOverlayGroupPresets());
+        this.container.querySelector('#rop-group-preset-export')?.addEventListener('click', () => this._exportOverlayGroupPresets());
+        this._refreshOverlayGroupPresetSelect();
+
+        // Reset to default button
+        this.container.querySelector('#rop-reset-transform')?.addEventListener('click', () => {
+            if (!this._selectedOv) return;
+            const ov = this._selectedOv;
+            ov.w = 300;
+            ov.h = 300;
+            ov.x = (1080 - ov.w) / 2;  // 居中
+            ov.y = (1920 - ov.h) / 2;
+            ov.rotation = 0;
+            ov.opacity = 255;
+            if (ov.type === 'image') ov.scale = 1;
+            this._syncFromOverlay(ov);
+            if (this.videoCanvas) this.videoCanvas.render();
+        });
+
+        // Fill screen button
+        this.container.querySelector('#rop-fill-screen')?.addEventListener('click', () => {
+            if (!this._selectedOv) return;
+            const ov = this._selectedOv;
+            ov.x = 0;
+            ov.y = 0;
+            ov.w = 1080;
+            ov.h = 1920;
+            if (ov.type === 'image') ov.scale = 1;
+            this._syncFromOverlay(ov);
+            if (this.videoCanvas) this.videoCanvas.render();
+        });
+
         // 使用 FontManager 填充字体下拉框（和字幕面板一致）
         if (window.getFontManager) {
             const fm = getFontManager();
             fm.refreshFontSelect('rop-font', 'Arial');
             fm.refreshFontSelect('rop-title-font', 'Crimson Pro');
             fm.refreshFontSelect('rop-body-font', 'Arial');
+            fm.refreshFontSelect('rop-footer-font', 'Arial');
             if (fm && typeof fm.loadGoogleFont === 'function') {
                 fm.loadGoogleFont('Crimson Pro').catch(() => { });
             }
@@ -284,13 +380,16 @@ class ReelsOverlayPanel {
             'rop-flip-v', 'rop-blend', 'rop-anim-in', 'rop-anim-out',
             'rop-anim-in-dur', 'rop-anim-out-dur',
             // Text card fields
-            'rop-card-color', 'rop-card-opacity',
-            'rop-radius-tl', 'rop-radius-tr', 'rop-radius-bl', 'rop-radius-br',
+            'rop-card-color', 'rop-card-opacity', 'rop-radius-all',
             'rop-title-text', 'rop-title-font', 'rop-title-fontsize',
             'rop-title-color', 'rop-title-bold', 'rop-title-weight', 'rop-title-uppercase', 'rop-title-align',
             'rop-body-text', 'rop-body-font', 'rop-body-fontsize',
             'rop-body-color', 'rop-body-bold', 'rop-body-weight', 'rop-body-linespacing', 'rop-body-align',
-            'rop-auto-fit', 'rop-auto-center', 'rop-fullscreen-mask', 'rop-title-body-gap',
+            'rop-footer-text', 'rop-footer-font', 'rop-footer-fontsize',
+            'rop-footer-color', 'rop-footer-bold', 'rop-footer-weight', 'rop-footer-align',
+            'rop-text-stroke-color', 'rop-text-stroke-width',
+            'rop-text-shadow-color', 'rop-text-shadow-blur', 'rop-text-shadow-x', 'rop-text-shadow-y',
+            'rop-auto-fit', 'rop-auto-center', 'rop-fullscreen-mask', 'rop-title-body-gap', 'rop-offset-y',
             'rop-pad-top', 'rop-pad-bottom', 'rop-pad-left', 'rop-pad-right',
             'rop-card-width',
             'rop-auto-shrink', 'rop-max-height', 'rop-title-max-lines', 'rop-min-fontsize',
@@ -300,6 +399,18 @@ class ReelsOverlayPanel {
             if (!el) continue;
             el.addEventListener('input', () => this._syncToOverlay());
             el.addEventListener('change', () => this._syncToOverlay());
+        }
+
+        // Live value display for sliders
+        const opSlider = this.container.querySelector('#rop-opacity');
+        const opVal = this.container.querySelector('#rop-opacity-val');
+        if (opSlider && opVal) {
+            opSlider.addEventListener('input', () => { opVal.textContent = opSlider.value + '%'; });
+        }
+        const scSlider = this.container.querySelector('#rop-scale');
+        const scVal = this.container.querySelector('#rop-scale-val');
+        if (scSlider && scVal) {
+            scSlider.addEventListener('input', () => { scVal.textContent = scSlider.value + '%'; });
         }
 
         const syncBoldToWeight = (boldId, weightId, boldValue = '700', normalValue = '400') => {
@@ -322,11 +433,13 @@ class ReelsOverlayPanel {
         syncBoldToWeight('rop-bold', 'rop-font-weight', '700', '400');
         syncBoldToWeight('rop-title-bold', 'rop-title-weight', '900', '400');
         syncBoldToWeight('rop-body-bold', 'rop-body-weight', '700', '400');
+        syncBoldToWeight('rop-footer-bold', 'rop-footer-weight', '700', '400');
 
         const fontWeightPairs = [
             ['rop-font', 'rop-font-weight'],
             ['rop-title-font', 'rop-title-weight'],
             ['rop-body-font', 'rop-body-weight'],
+            ['rop-footer-font', 'rop-footer-weight'],
         ];
         for (const [fontId, weightId] of fontWeightPairs) {
             const fontEl = this.container.querySelector('#' + fontId);
@@ -355,21 +468,48 @@ class ReelsOverlayPanel {
             numEl.addEventListener('change', () => { rangeEl.value = numEl.value; this._syncToOverlay(); });
         });
 
-        // "Set all radii" shortcut
-        const radiusAll = this.container.querySelector('#rop-radius-all');
-        if (radiusAll) {
-            radiusAll.addEventListener('input', () => {
-                const v = parseFloat(radiusAll.value) || 0;
-                ['rop-radius-tl', 'rop-radius-tr', 'rop-radius-bl', 'rop-radius-br'].forEach(id => {
-                    const el = this.container.querySelector('#' + id);
-                    if (el) el.value = v;
-                    // Also update linked number readout
-                    const numReadout = this.container.querySelector(`.rop-num-readout[data-link="${id}"]`);
-                    if (numReadout) numReadout.value = v;
-                });
-                this._syncToOverlay();
+        // Drag-to-scrub on number inputs (click+drag horizontally to adjust value)
+        this.container.querySelectorAll('input.rop-input[type="number"]').forEach(el => {
+            el.style.cursor = 'ew-resize';
+            let dragging = false, startX = 0, startVal = 0;
+            el.addEventListener('mousedown', (e) => {
+                // Allow clicking into input to type when already focused
+                if (document.activeElement === el) return;
+                dragging = true;
+                startX = e.clientX;
+                startVal = parseFloat(el.value) || 0;
+                e.preventDefault();
+                const onMove = (me) => {
+                    if (!dragging) return;
+                    const dx = me.clientX - startX;
+                    const speed = me.shiftKey ? 0.1 : 1;
+                    const step = parseFloat(el.step) || 1;
+                    el.value = Math.round((startVal + dx * speed * step) / step) * step;
+                    el.dispatchEvent(new Event('input', { bubbles: true }));
+                };
+                const onUp = () => {
+                    dragging = false;
+                    document.removeEventListener('mousemove', onMove);
+                    document.removeEventListener('mouseup', onUp);
+                };
+                document.addEventListener('mousemove', onMove);
+                document.addEventListener('mouseup', onUp);
             });
-        }
+            // Double-click to focus for manual typing
+            el.addEventListener('dblclick', (e) => {
+                e.preventDefault();
+                el.focus();
+                el.select();
+                el.style.cursor = 'text';
+            });
+            el.addEventListener('blur', () => {
+                el.style.cursor = 'ew-resize';
+            });
+            el.addEventListener('keydown', (e) => {
+                if (e.key === 'Enter') { el.blur(); }
+            });
+        });
+
 
         // Per-parameter ↺ reset buttons
         this.container.querySelectorAll('.rop-reset-btn').forEach(btn => {
@@ -686,11 +826,19 @@ class ReelsOverlayPanel {
         input.onchange = (e) => {
             const file = e.target.files[0];
             if (!file) return;
-            const url = URL.createObjectURL(file);
+            // Electron 桌面版: 用 file.path + toFileUrl (与其他模块一致)
+            // Web 模式回退: 用 blob URL
+            let url;
+            if (file.path && window.electronAPI && window.electronAPI.toFileUrl) {
+                url = window.electronAPI.toFileUrl(file.path);
+            }
+            if (!url) {
+                url = URL.createObjectURL(file);
+            }
             const ReelsOverlay = window.ReelsOverlay;
             if (!ReelsOverlay) return;
             const ov = ReelsOverlay.createImageOverlay({
-                src: url, x: 200, y: 400, w: 300, h: 300,
+                content: url, x: 390, y: 810, w: 300, h: 300,
                 start: 0, end: 5,
             });
             if (this.videoCanvas) this.videoCanvas.addOverlay(ov);
@@ -740,15 +888,43 @@ class ReelsOverlayPanel {
                 ? (ov.title_text || '').slice(0, 15) || '文案卡片'
                 : (ov.type === 'text' ? (ov.content || '').slice(0, 15) : (ov.name || '图片'));
             return `<div class="rop-list-item ${isSelected ? 'selected' : ''}" data-id="${ov.id}">
-                ${icon} <span>${label}</span>
+                <span class="rop-list-arrow">${isSelected ? '▼' : '▶'}</span>
+                ${icon} <span class="rop-list-label">${label}</span>
                 <span class="rop-list-time">${ov.start?.toFixed(1) || 0}s–${ov.end?.toFixed(1) || 0}s</span>
+                <button class="rop-list-del" data-id="${ov.id}" title="删除此覆层">✕</button>
             </div>`;
         }).join('');
 
         list.querySelectorAll('.rop-list-item').forEach(el => {
-            el.addEventListener('click', () => {
+            // Click label to select/toggle
+            el.addEventListener('click', (e) => {
+                if (e.target.classList.contains('rop-list-del')) return; // don't select when clicking delete
                 const ov = (this.videoCanvas?.overlayMgr?.overlays || []).find(o => o.id === el.dataset.id);
-                if (ov) this.selectOverlay(ov);
+                if (!ov) return;
+                if (this._selectedOv?.id === ov.id) {
+                    // Click again to collapse
+                    this.deselectOverlay();
+                } else {
+                    this.selectOverlay(ov);
+                }
+                this._refreshList();
+            });
+        });
+
+        // Delete buttons
+        list.querySelectorAll('.rop-list-del').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                const id = btn.dataset.id;
+                const ov = (this.videoCanvas?.overlayMgr?.overlays || []).find(o => o.id === id);
+                const label = ov ? (ov.name || ov.title_text || ov.content || '').slice(0, 20) || ov.type : id;
+                if (!confirm(`确定删除覆层「${label}」吗？`)) return;
+                this.videoCanvas.overlayMgr.removeOverlay(id);
+                if (this._selectedOv?.id === id) {
+                    this._selectedOv = null;
+                    this.container.querySelector('#rop-props').style.display = 'none';
+                }
+                this._refreshList();
             });
         });
     }
@@ -766,6 +942,15 @@ class ReelsOverlayPanel {
         this.container.querySelector('#rop-text-props').style.display = ov.type === 'text' ? 'block' : 'none';
         this.container.querySelector('#rop-image-props').style.display = ov.type === 'image' ? 'block' : 'none';
         this.container.querySelector('#rop-textcard-props').style.display = ov.type === 'textcard' ? 'block' : 'none';
+
+        // Image overlays: show scale, hide W/H. Others: show W/H, hide scale.
+        const isImg = ov.type === 'image';
+        this.container.querySelector('#rop-wh-label-w').style.display = isImg ? 'none' : '';
+        this.container.querySelector('#rop-w').style.display = isImg ? 'none' : '';
+        this.container.querySelector('#rop-wh-label-h').style.display = isImg ? 'none' : '';
+        this.container.querySelector('#rop-h').style.display = isImg ? 'none' : '';
+        this.container.querySelector('#rop-scale-label').style.display = isImg ? '' : 'none';
+        this.container.querySelector('#rop-scale-wrap').style.display = isImg ? '' : 'none';
         this._syncFromOverlay(ov);
         this._refreshList();
     }
@@ -842,7 +1027,10 @@ class ReelsOverlayPanel {
         this._val('rop-w', Math.round(ov.w));
         this._val('rop-h', Math.round(ov.h));
         this._val('rop-rotation', ov.rotation || 0);
-        this._val('rop-opacity', Math.round((ov.opacity ?? 1) * 100));
+        const opacityPct = Math.round((ov.opacity ?? 255) / 255 * 100);
+        this._val('rop-opacity', opacityPct);
+        const opValEl = this.container.querySelector('#rop-opacity-val');
+        if (opValEl) opValEl.textContent = opacityPct + '%';
         this._val('rop-start', ov.start || 0);
         this._val('rop-end', ov.end || 0);
 
@@ -862,19 +1050,19 @@ class ReelsOverlayPanel {
         }
 
         if (ov.type === 'image') {
-            this._val('rop-scale', (ov.scale || 1) * 100);
-            this._val('rop-flip-h', ov.flip_h || false);
-            this._val('rop-flip-v', ov.flip_v || false);
+            const scalePct = Math.round((ov.scale || 1) * 100);
+            this._val('rop-scale', scalePct);
+            const scValEl = this.container.querySelector('#rop-scale-val');
+            if (scValEl) scValEl.textContent = scalePct + '%';
+            this._val('rop-flip-h', ov.flip_x || false);
+            this._val('rop-flip-v', ov.flip_y || false);
             this._val('rop-blend', ov.blend_mode || 'source-over');
         }
 
         if (ov.type === 'textcard') {
             this._val('rop-card-color', ov.card_color || '#ffffff');
             this._val('rop-card-opacity', ov.card_opacity ?? 80);
-            this._val('rop-radius-tl', ov.radius_tl ?? 33);
-            this._val('rop-radius-tr', ov.radius_tr ?? 33);
-            this._val('rop-radius-bl', ov.radius_bl ?? 33);
-            this._val('rop-radius-br', ov.radius_br ?? 33);
+            this._val('rop-radius-all', ov.radius_tl ?? 33);
             this._val('rop-title-text', ov.title_text || '');
             this._val('rop-title-font', ov.title_font_family || 'Crimson Pro');
             this._refreshWeightOptions('rop-title-weight', ov.title_font_family || 'Crimson Pro');
@@ -895,8 +1083,26 @@ class ReelsOverlayPanel {
             this._val('rop-body-bold', bw >= 600);
             this._val('rop-body-linespacing', ov.body_line_spacing ?? 6);
             this._val('rop-body-align', ov.body_align || 'center');
+            // Footer
+            this._val('rop-footer-text', ov.footer_text || '');
+            this._val('rop-footer-font', ov.footer_font_family || 'Arial');
+            this._refreshWeightOptions('rop-footer-weight', ov.footer_font_family || 'Arial');
+            this._val('rop-footer-fontsize', ov.footer_fontsize ?? 32);
+            this._val('rop-footer-color', ov.footer_color || '#666666');
+            const ftw = Math.max(100, Math.min(900, parseInt(ov.footer_font_weight || (ov.footer_bold ? 700 : 400), 10) || 400));
+            this._val('rop-footer-weight', ftw);
+            this._val('rop-footer-bold', ftw >= 600);
+            this._val('rop-footer-align', ov.footer_align || 'center');
+            // Text effects
+            this._val('rop-text-stroke-color', ov.text_stroke_color || '#000000');
+            this._val('rop-text-stroke-width', ov.text_stroke_width ?? 0);
+            this._val('rop-text-shadow-color', ov.text_shadow_color || '#000000');
+            this._val('rop-text-shadow-blur', ov.text_shadow_blur ?? 0);
+            this._val('rop-text-shadow-x', ov.text_shadow_x ?? 2);
+            this._val('rop-text-shadow-y', ov.text_shadow_y ?? 2);
             this._val('rop-auto-fit', ov.auto_fit !== false);
             this._val('rop-auto-center', ov.auto_center_v !== false);
+            this._val('rop-offset-y', ov.offset_y ?? 0);
             this._val('rop-fullscreen-mask', ov.fullscreen_mask || false);
             this._val('rop-title-body-gap', ov.title_body_gap ?? 42);
             this._val('rop-pad-top', ov.padding_top ?? 20);
@@ -910,10 +1116,10 @@ class ReelsOverlayPanel {
             this._val('rop-min-fontsize', ov.min_fontsize ?? 16);
         }
 
-        this._val('rop-anim-in', ov.anim_in || 'none');
-        this._val('rop-anim-out', ov.anim_out || 'none');
-        this._val('rop-anim-in-dur', ov.anim_in_dur || 0.3);
-        this._val('rop-anim-out-dur', ov.anim_out_dur || 0.3);
+        this._val('rop-anim-in', ov.anim_in_type || 'none');
+        this._val('rop-anim-out', ov.anim_out_type || 'none');
+        this._val('rop-anim-in-dur', ov.anim_in_duration || 0.3);
+        this._val('rop-anim-out-dur', ov.anim_out_duration || 0.3);
     }
 
     _syncToOverlay() {
@@ -925,7 +1131,7 @@ class ReelsOverlayPanel {
         ov.w = this._get('rop-w');
         ov.h = this._get('rop-h');
         ov.rotation = this._get('rop-rotation');
-        ov.opacity = this._get('rop-opacity') / 100;
+        ov.opacity = Math.round(this._get('rop-opacity') / 100 * 255);
         ov.start = this._get('rop-start');
         ov.end = this._get('rop-end');
 
@@ -945,18 +1151,19 @@ class ReelsOverlayPanel {
 
         if (ov.type === 'image') {
             ov.scale = this._get('rop-scale') / 100;
-            ov.flip_h = this._get('rop-flip-h');
-            ov.flip_v = this._get('rop-flip-v');
+            ov.flip_x = this._get('rop-flip-h');
+            ov.flip_y = this._get('rop-flip-v');
             ov.blend_mode = this._get('rop-blend');
         }
 
         if (ov.type === 'textcard') {
             ov.card_color = this._get('rop-card-color');
             ov.card_opacity = this._get('rop-card-opacity');
-            ov.radius_tl = this._get('rop-radius-tl');
-            ov.radius_tr = this._get('rop-radius-tr');
-            ov.radius_bl = this._get('rop-radius-bl');
-            ov.radius_br = this._get('rop-radius-br');
+            const radius = this._get('rop-radius-all');
+            ov.radius_tl = radius;
+            ov.radius_tr = radius;
+            ov.radius_bl = radius;
+            ov.radius_br = radius;
             ov.title_text = this._get('rop-title-text');
             ov.title_font_family = this._get('rop-title-font');
             ov.title_fontsize = this._get('rop-title-fontsize');
@@ -975,8 +1182,25 @@ class ReelsOverlayPanel {
             ov.body_bold = bw >= 600;
             ov.body_line_spacing = this._get('rop-body-linespacing');
             ov.body_align = this._get('rop-body-align');
+            // Footer
+            ov.footer_text = this._get('rop-footer-text');
+            ov.footer_font_family = this._get('rop-footer-font');
+            ov.footer_fontsize = this._get('rop-footer-fontsize');
+            ov.footer_color = this._get('rop-footer-color');
+            const ftw = Math.max(100, Math.min(900, parseInt(this._get('rop-footer-weight') || (this._get('rop-footer-bold') ? 700 : 400), 10) || 400));
+            ov.footer_font_weight = ftw;
+            ov.footer_bold = ftw >= 600;
+            ov.footer_align = this._get('rop-footer-align');
+            // Text effects
+            ov.text_stroke_color = this._get('rop-text-stroke-color');
+            ov.text_stroke_width = this._get('rop-text-stroke-width');
+            ov.text_shadow_color = this._get('rop-text-shadow-color');
+            ov.text_shadow_blur = this._get('rop-text-shadow-blur');
+            ov.text_shadow_x = this._get('rop-text-shadow-x');
+            ov.text_shadow_y = this._get('rop-text-shadow-y');
             ov.auto_fit = this._get('rop-auto-fit');
             ov.auto_center_v = this._get('rop-auto-center');
+            ov.offset_y = this._get('rop-offset-y');
             ov.fullscreen_mask = this._get('rop-fullscreen-mask');
             ov.title_body_gap = this._get('rop-title-body-gap');
             ov.padding_top = this._get('rop-pad-top');
@@ -991,10 +1215,13 @@ class ReelsOverlayPanel {
             ov.min_fontsize = this._get('rop-min-fontsize');
         }
 
-        ov.anim_in = this._get('rop-anim-in');
-        ov.anim_out = this._get('rop-anim-out');
-        ov.anim_in_dur = this._get('rop-anim-in-dur');
-        ov.anim_out_dur = this._get('rop-anim-out-dur');
+        ov.anim_in_type = this._get('rop-anim-in');
+        ov.anim_out_type = this._get('rop-anim-out');
+        ov.anim_in_duration = this._get('rop-anim-in-dur');
+        ov.anim_out_duration = this._get('rop-anim-out-dur');
+
+        // Re-render canvas to reflect changes
+        if (this.videoCanvas) this.videoCanvas.render();
     }
 
     // ═══════════════════════════════════════════════
@@ -1195,6 +1422,169 @@ class ReelsOverlayPanel {
         };
         input.click();
     }
+
+    // ═══════════════════════════════════════════════
+    // 覆层组预设管理 (多层)
+    // ═══════════════════════════════════════════════
+
+    _getOverlayGroupPresets() {
+        try {
+            return JSON.parse(localStorage.getItem('reels_overlay_group_presets') || '{}');
+        } catch (e) { return {}; }
+    }
+
+    _setOverlayGroupPresets(data) {
+        localStorage.setItem('reels_overlay_group_presets', JSON.stringify(data));
+    }
+
+    _refreshOverlayGroupPresetSelect() {
+        if (!this.container) return;
+        const select = this.container.querySelector('#rop-group-preset-select');
+        if (!select) return;
+        const current = select.value;
+        const presets = this._getOverlayGroupPresets();
+        select.innerHTML = '<option value="">-- 选择预设 --</option>';
+        for (const name of Object.keys(presets)) {
+            const layers = presets[name];
+            const count = Array.isArray(layers) ? layers.length : 0;
+            const opt = document.createElement('option');
+            opt.value = name;
+            opt.textContent = `${name} (${count}层)`;
+            select.appendChild(opt);
+        }
+        if (current && presets[current]) select.value = current;
+    }
+
+    async _saveOverlayGroupPreset() {
+        if (!this.videoCanvas) {
+            alert('没有可用的覆层管理器');
+            return;
+        }
+        const overlays = this.videoCanvas.overlayMgr?.overlays || [];
+        if (overlays.length === 0) {
+            alert('当前没有覆层，请先添加覆层再保存');
+            return;
+        }
+        const name = await this._showCardTemplateNameDialog('');
+        if (!name) return;
+
+        // Deep clone overlays, strip runtime-only keys
+        const serialized = overlays.map(ov => {
+            const clone = JSON.parse(JSON.stringify(ov));
+            delete clone._img;
+            delete clone._imgLoaded;
+            delete clone._templateName;
+            // Clear text content — preset is for style only
+            // Actually keep text for full group preset (user may want template text)
+            return clone;
+        });
+
+        const presets = this._getOverlayGroupPresets();
+        presets[name] = serialized;
+        this._setOverlayGroupPresets(presets);
+        this._refreshOverlayGroupPresetSelect();
+        const select = this.container.querySelector('#rop-group-preset-select');
+        if (select) select.value = name;
+        alert(`✅ 覆层组预设 "${name}" 已保存 (${serialized.length} 层)`);
+    }
+
+    _loadOverlayGroupPreset() {
+        const select = this.container.querySelector('#rop-group-preset-select');
+        if (!select || !select.value) {
+            alert('请先在下拉列表中选择一个预设');
+            return;
+        }
+        const name = select.value;
+        const presets = this._getOverlayGroupPresets();
+        const layers = presets[name];
+        if (!Array.isArray(layers) || layers.length === 0) {
+            alert('该预设为空或格式不正确');
+            return;
+        }
+        if (!this.videoCanvas) return;
+
+        const mgr = this.videoCanvas.overlayMgr;
+        if (!mgr) return;
+
+        // Confirm if there are existing overlays
+        if (mgr.overlays.length > 0) {
+            if (!confirm(`当前有 ${mgr.overlays.length} 个覆层，加载预设将替换全部。继续？`)) return;
+        }
+
+        // Clear existing
+        mgr.overlays = [];
+
+        // Deep-clone and add each layer with new IDs
+        for (const layerData of layers) {
+            const clone = JSON.parse(JSON.stringify(layerData));
+            clone.id = 'ov_' + Date.now() + '_' + Math.random().toString(36).slice(2, 8);
+            mgr.overlays.push(clone);
+        }
+
+        // Refresh UI
+        this._selectedOv = mgr.overlays[0] || null;
+        this._refreshOverlayList();
+        if (this._selectedOv) this._syncFromOverlay(this._selectedOv);
+        if (this.videoCanvas) this.videoCanvas.render();
+        alert(`✅ 已加载预设 "${name}" (${layers.length} 层)`);
+    }
+
+    _deleteOverlayGroupPreset() {
+        const select = this.container.querySelector('#rop-group-preset-select');
+        if (!select || !select.value) {
+            alert('请先在下拉列表中选择要删除的预设');
+            return;
+        }
+        const name = select.value;
+        if (!confirm(`确定要删除预设 "${name}" 吗？`)) return;
+        const presets = this._getOverlayGroupPresets();
+        delete presets[name];
+        this._setOverlayGroupPresets(presets);
+        this._refreshOverlayGroupPresetSelect();
+    }
+
+    _importOverlayGroupPresets() {
+        const input = document.createElement('input');
+        input.type = 'file';
+        input.accept = '.json';
+        input.onchange = (e) => {
+            const file = e.target.files[0];
+            if (!file) return;
+            const reader = new FileReader();
+            reader.onload = (ev) => {
+                try {
+                    const data = JSON.parse(ev.target.result);
+                    const presets = this._getOverlayGroupPresets();
+                    const count = Object.keys(data).length;
+                    Object.assign(presets, data);
+                    this._setOverlayGroupPresets(presets);
+                    this._refreshOverlayGroupPresetSelect();
+                    alert(`✅ 成功导入了 ${count} 个覆层组预设`);
+                } catch (err) {
+                    console.error('导入预设出错:', err);
+                    alert('导入失败，不是有效的预设 JSON 文件。');
+                }
+            };
+            reader.readAsText(file);
+        };
+        input.click();
+    }
+
+    _exportOverlayGroupPresets() {
+        const presets = this._getOverlayGroupPresets();
+        const keys = Object.keys(presets);
+        if (keys.length === 0) {
+            alert('暂无覆层组预设可导出');
+            return;
+        }
+        const json = JSON.stringify(presets, null, 2);
+        const blob = new Blob([json], { type: 'application/json' });
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(blob);
+        a.download = `overlay_group_presets_${Date.now()}.json`;
+        a.click();
+        URL.revokeObjectURL(a.href);
+    }
 }
 
 // ═══════════════════════════════════════════════
@@ -1220,7 +1610,12 @@ class ReelsOverlayPanel {
                          border-bottom: 1px solid rgba(255,255,255,0.05); transition: background 0.15s; }
         .rop-list-item:hover { background:rgba(255,255,255,0.06); }
         .rop-list-item.selected { background:rgba(0,212,255,0.12); border-left:3px solid #00D4FF; }
-        .rop-list-time { margin-left:auto; font-size:10px; color:#888; font-family:monospace; }
+        .rop-list-arrow { font-size:9px; color:#666; width:10px; flex-shrink:0; }
+        .rop-list-label { flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+        .rop-list-time { font-size:10px; color:#888; font-family:monospace; white-space:nowrap; }
+        .rop-list-del { background:none; border:none; color:#666; cursor:pointer; font-size:13px; padding:0 4px;
+                        line-height:1; flex-shrink:0; transition:color 0.15s; }
+        .rop-list-del:hover { color:#ff6b6b; }
         .rop-empty { padding:16px; text-align:center; color:#555; font-style:italic; }
         .rop-group { padding:8px 10px; background:var(--bg-tertiary, #0f0f2e); border-radius:6px; margin-top:8px; }
         .rop-group-title { font-weight:bold; font-size:11px; color:#8899bb; margin-bottom:6px; text-transform:uppercase; letter-spacing:0.5px; }

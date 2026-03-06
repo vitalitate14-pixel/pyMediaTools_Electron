@@ -61,8 +61,9 @@ function buildSubtitleBurnCommand(params) {
     }
 
     // Subtitle filter path escaping: normalize backslashes to forward slashes,
-    // then escape colons and single-quotes for FFmpeg's libass syntax.
+    // then escape remaining backslashes, colons, and single-quotes for FFmpeg's libass syntax.
     const escapedAssPath = assPath.split('\\').join('/')
+        .replace(/\\/g, '\\\\')
         .replace(/:/g, '\\:')
         .replace(/'/g, "'\\''");
     const subtitleFilter = `subtitles='${escapedAssPath}'`;
@@ -272,10 +273,10 @@ class ReelsBatchExporter {
                 if (window.ReelsSubtitleProcessor) {
                     assContent = ReelsSubtitleProcessor.generateEnhancedASS(
                         task.segments, style, {
-                            karaokeHighlight,
-                            videoW: 1080,
-                            videoH: 1920,
-                        }
+                        karaokeHighlight,
+                        videoW: 1080,
+                        videoH: 1920,
+                    }
                     );
                 } else {
                     assContent = generateASS(task.segments, style);

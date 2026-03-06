@@ -63,7 +63,7 @@ async function ttsWorkflow(data) {
     fs.mkdirSync(outputDir, { recursive: true });
 
     // 提取文本前缀作为文件名
-    const cleanText = text.replace(/<[^>]+>/g, '').replace(/\[[^\]]+\]/g, '').replace(/[<>\[\]()]/g, '').replace(/script/gi, '** **');
+    const cleanText = text.replace(/[<>]/g, '').replace(/\[[^\]]+\]/g, '').replace(/[\[\]()]/g, '');
     let textPrefix = cleanText.split(/\s+/).slice(0, 15).join('_').slice(0, 60);
     textPrefix = textPrefix.replace(/[^a-zA-Z0-9\u4e00-\u9fff _-]/g, '').replace(/\s+/g, '_').trim();
     if (!textPrefix) textPrefix = 'audio';
@@ -84,8 +84,7 @@ async function ttsWorkflow(data) {
     const { audio, usedKey } = await elevenlabs.requestTTSWithRotation(
         apiKeys, voice_id, text, model_id, stabilityVal, output_format, key_index
     );
-    const maskedKeyStr = usedKey ? ('***' + String(usedKey).slice(-4)) : '(none)';
-    console.log(`[一键配音] 任务 ${task_index + 1} 使用 Key: ${maskedKeyStr}`);
+    console.log(`[一键配音] 任务 ${task_index + 1} TTS 生成完成`);
 
     // 统一导出命名：同一任务使用同一 basename（.mp3/.txt/.srt）
     const sourcePath = path.join(audioGroup, `${taskPrefix}.mp3`);
