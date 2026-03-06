@@ -1,6 +1,6 @@
 {
   "name": "pymediatools",
-  "version": "2.1.0",
+  "version": "2.1.1",
   "description": "统一媒体工具包 - 字幕对齐 + 媒体转换",
   "author": {
     "name": "TimCode",

@@ -44,6 +44,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
 
     // 选择目录
     selectDirectory: () => ipcRenderer.invoke('select-directory'),
+    scanDirectory: (dirPath) => ipcRenderer.invoke('scan-directory', dirPath),
     getDownloadsPath: () => ipcRenderer.invoke('get-downloads-path'),
 
     // 批量Reels - 烧录字幕
