@@ -72,7 +72,7 @@ jobs:
         run: npx electron-builder --${{ matrix.platform }} ${{ matrix.arch_flags }} --publish never
 
       - name: Attest Build Provenance
-        uses: actions/attest-build-provenance@v2
+        uses: actions/attest-build-provenance@v4
         with:
           subject-path: |
             dist-electron/*.dmg
