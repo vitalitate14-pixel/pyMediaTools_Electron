@@ -389,9 +389,11 @@ class ReelsRichTextEditor {
         const toolbar = this.popup.querySelector('.rte-se-toolbar');
 
         // ═══ 关键修复：工具栏按钮用 mousedown 阻止失焦 ═══
+        // 注意：<select> 需要获得焦点才能打开下拉，所以排除
         toolbar.addEventListener('mousedown', (e) => {
-            // 阻止点击工具栏导致 contenteditable 失去焦点（选区丢失）
-            e.preventDefault();
+            if (e.target.tagName !== 'SELECT' && e.target.tagName !== 'OPTION') {
+                e.preventDefault();
+            }
         });
 
         // Toolbar 按钮
