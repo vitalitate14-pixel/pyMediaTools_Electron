@@ -414,7 +414,9 @@ function _initReelsModule() {
             if (clip && clip.start != null) {
                 const duration = _getPreviewDuration();
                 if (duration > 0) {
-                    const percent = (clip.start / duration) * 100;
+                    // 跳转到字幕中间，确保预览画布能看到字幕
+                    const midTime = (clip.start + (clip.end || clip.start)) / 2;
+                    const percent = (midTime / duration) * 100;
                     _onSeek({ target: { value: percent } });
                 }
             }
