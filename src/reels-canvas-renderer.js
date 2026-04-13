@@ -1503,8 +1503,44 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text`
     }
 
     const events = segments.map(seg => {
-        const text = (seg.text || '').replace(/\n/g, '\\N');
-        return `Dialogue: 0,${toASSTime(seg.start)},${toASSTime(seg.end)},Default,,0,0,0,,${text}`;
+        const rawText = (seg.text || '').replace(/\n/g, '\\N');
+
+        // ── 富文本 ASS 内联样式 ──
+        if (seg.styled_ranges && seg.styled_ranges.length > 0 && typeof ReelsRichText !== 'undefined') {
+            const chunks = ReelsRichText.splitByRanges(seg.text || '', seg.styled_ranges, {
+                fontsize: fontSize,
+                color: s.color_text || '#FFFFFF',
+                bold: bold !== 0,
+            });
+            let assText = '';
+            for (const c of chunks) {
+                let overrides = '';
+                // 颜色覆盖
+                if (c.style.color && c.style.color !== (s.color_text || '#FFFFFF')) {
+                    overrides += `\\c${toASSColor(c.style.color)}`;
+                }
+                // 字号覆盖
+                if (c.style.fontsize && c.style.fontsize !== fontSize) {
+                    overrides += `\\fs${c.style.fontsize}`;
+                }
+                // 粗体覆盖
+                if (c.style.bold !== undefined) {
+                    const segBold = c.style.bold ? -1 : 0;
+                    if (segBold !== bold) {
+                        overrides += `\\b${segBold === -1 ? 1 : 0}`;
+                    }
+                }
+                const segChunkText = c.text.replace(/\n/g, '\\N');
+                if (overrides) {
+                    assText += `{${overrides}}${segChunkText}`;
+                } else {
+                    assText += segChunkText;
+                }
+            }
+            return `Dialogue: 0,${toASSTime(seg.start)},${toASSTime(seg.end)},Default,,0,0,0,,${assText}`;
+        }
+
+        return `Dialogue: 0,${toASSTime(seg.start)},${toASSTime(seg.end)},Default,,0,0,0,,${rawText}`;
     });
 
     return header + '\n' + events.join('\n') + '\n';

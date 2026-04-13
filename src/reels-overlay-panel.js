@@ -2658,6 +2658,8 @@ class ReelsOverlayPanel {
             'footer_stroke_color', 'footer_stroke_width', 'footer_shadow_color', 'footer_shadow_blur', 'footer_shadow_x', 'footer_shadow_y',
             // 动画
             'anim_in_type', 'anim_out_type', 'anim_in_duration', 'anim_out_duration',
+            // 富文本样式范围
+            'title_styled_ranges', 'body_styled_ranges', 'footer_styled_ranges',
         ];
         const result = {};
         for (const k of keys) {

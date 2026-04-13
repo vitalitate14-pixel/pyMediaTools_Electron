@@ -184,6 +184,7 @@ class ReelsTimelineEditor {
             name: (seg.text || seg.content || '').slice(0, 20),
             color: TL_COLORS.trackTypes.subs,
             _segIdx: i,
+            styled_ranges: seg.styled_ranges || null,
         }));
         // 检查是否已有字幕轨
         const existIdx = this._tracks.findIndex(t => t.type === 'subs');
