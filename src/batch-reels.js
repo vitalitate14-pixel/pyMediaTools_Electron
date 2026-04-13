@@ -410,6 +410,40 @@ function _initReelsModule() {
         };
         _reelsState.timelineEditor.onClipSelect = (ti, ci, clip) => {
             console.log('[Timeline] Selected clip', ti, ci, clip);
+            // 选中字幕块时跳转到该字幕的开始时间
+            if (clip && clip.start != null) {
+                const duration = _getPreviewDuration();
+                if (duration > 0) {
+                    const percent = (clip.start / duration) * 100;
+                    _onSeek({ target: { value: percent } });
+                }
+            }
+        };
+        // 双击字幕编辑后的回写
+        _reelsState.timelineEditor.onSubtitleEdit = (trackIdx, clipIdx, newText, oldText, newRanges) => {
+            const task = _getSelectedTask();
+            if (!task || !task.segments) return;
+            // 通过 _segIdx（如有）或 clipIdx 定位到 segment
+            const track = _reelsState.timelineEditor._tracks[trackIdx];
+            const clip = track && track.clips[clipIdx];
+            const segIdx = (clip && clip._segIdx != null) ? clip._segIdx : clipIdx;
+            if (segIdx >= 0 && segIdx < task.segments.length) {
+                const seg = task.segments[segIdx];
+                seg.text = newText;
+                if (seg.edited_text !== undefined) seg.edited_text = newText;
+                // 保存富文本样式范围
+                if (newRanges && newRanges.length > 0) {
+                    seg.styled_ranges = newRanges;
+                    if (clip) clip.styled_ranges = newRanges;
+                } else {
+                    delete seg.styled_ranges;
+                    if (clip) delete clip.styled_ranges;
+                }
+                
+                console.log(`[Timeline] Segment #${segIdx} text/style updated: "${oldText}" → "${newText}"`, newRanges);
+                // 刷新预览
+                if (typeof reelsUpdatePreview === 'function') reelsUpdatePreview();
+            }
         };
         // 加载默认空轨道
         _reelsState.timelineEditor.setTracks([

@@ -42,6 +42,12 @@ class ReelsCanvasRenderer {
         const segEnd = segment.end || 0;
         if (currentTime < segStart || currentTime > segEnd) return;
 
+        // 【拦截】如果包含富文本样式范围，则进入独立的富文本渲染循环，以此保证旧版 0 损耗
+        if (segment.styled_ranges && segment.styled_ranges.length > 0) {
+            this._renderRichTextSubtitle(style, segment, currentTime, videoW, videoH);
+            return;
+        }
+
         const anim = typeof ReelsAnimEngine !== 'undefined' ? ReelsAnimEngine : null;
 
         // ── 字体设置 ──
@@ -1105,6 +1111,285 @@ class ReelsCanvasRenderer {
         const h = this.canvas.height;
         ctx.drawImage(videoEl, 0, 0, w, h);
         this.renderSubtitle(style, segment, videoEl.currentTime, w, h);
+    }
+
+    // ═══════════════════════════════════════════════
+    // 富文本渲染循环 (Phase 4)
+    // ═══════════════════════════════════════════════
+
+    _renderRichTextSubtitle(style, segment, currentTime, videoW, videoH) {
+        const ctx = this.ctx;
+        const s = style || {};
+        const text = segment.edited_text || segment.text || '';
+        
+        // 1. 基础配置提取
+        const fontFamily = s.font_family || 'Arial';
+        const fallbackFamily = (typeof _resolveGenericFallback === 'function') ? _resolveGenericFallback(fontFamily) : 'sans-serif';
+        const fw = (typeof _resolveFontWeight === 'function') ? _resolveFontWeight(s.font_weight, s.bold !== false ? 700 : 400) : 700;
+        
+        const baseStyleConfig = {
+            fontsize: s.fontsize || 74,
+            color: s.color || '#FFFFFF',
+            bold: (fw == 700)
+        };
+        const letterSpacing = s.letter_spacing || 0;
+
+        // 高级文本框/布局
+        const advEnabled = !!s.advanced_textbox_enabled;
+        const advAlign = (s.advanced_textbox_align || s.adv_text_align || 'center').toLowerCase();
+        const advX = parseFloat(s.advanced_textbox_x) || 0;
+        const advY = parseFloat(s.advanced_textbox_y) || 0;
+        const advW = Math.max(80, parseFloat(s.advanced_textbox_w) || videoW * 0.8);
+        const advH = Math.max(40, parseFloat(s.advanced_textbox_h) || 200);
+
+        let maxWidth;
+        if (advEnabled) {
+            maxWidth = Math.max(1, advW);
+        } else {
+            const wrapPercent = Math.max(20, Math.min(120, s.wrap_width_percent || 90));
+            maxWidth = Math.max(200, Math.floor(videoW * (wrapPercent / 100)));
+        }
+
+        // 2. 将纯文本切割为样式片段
+        const rawChunks = ReelsRichText.splitByRanges(text, segment.styled_ranges, baseStyleConfig);
+        
+        // 词级细化：为了支持换行，我们将每个 rawChunk 中的文字按空格拆成细粒度的 token (兼顾样式)
+        const tokens = [];
+        for (const chunk of rawChunks) {
+            const regex = /([^ \n]+|[ \n])/g;
+            let match;
+            while ((match = regex.exec(chunk.text)) !== null) {
+                // 如果是换行，我们专门标记
+                tokens.push({ text: match[0], style: chunk.style, isNewline: match[0] === '\n' });
+            }
+        }
+
+        // 辅助：获取段落的完整 ctx.font
+        const _getFontStr = (st) => {
+            const b = st.bold ? 700 : 400;
+            const sz = st.fontsize || baseStyleConfig.fontsize;
+            return `${b} ${sz}px "${fontFamily}", ${fallbackFamily}`;
+        };
+
+        // 3. 换行计算 & 尺寸测量
+        const lines = []; // 当前由 { tokens, metrics } 组成
+        let currentLine = { tokens: [], w: 0, maxAscent: 0, maxDescent: 0, maxFs: 0 };
+        
+        for (const tok of tokens) {
+            if (tok.isNewline) {
+                lines.push(currentLine);
+                currentLine = { tokens: [], w: 0, maxAscent: 0, maxDescent: 0, maxFs: 0 };
+                continue;
+            }
+
+            ctx.font = _getFontStr(tok.style);
+            const mw = this._measureTextWithSpacing(ctx, tok.text, letterSpacing);
+            // 近似高度获取，canvas 原生 TextMetrics 可给准确高度， fallback用fontSize
+            let asc = tok.style.fontsize * 0.8; 
+            let desc = tok.style.fontsize * 0.2;
+            const metrics = ctx.measureText(tok.text);
+            if (metrics.actualBoundingBoxAscent !== undefined) {
+                asc = metrics.actualBoundingBoxAscent;
+                desc = metrics.actualBoundingBoxDescent;
+            }
+
+            // 检查宽度是否超过 maxWidth
+            if (currentLine.w + mw > maxWidth && currentLine.tokens.length > 0 && tok.text !== ' ') {
+                // 折行前，剔除行尾空格
+                if (currentLine.tokens.length > 0 && currentLine.tokens[currentLine.tokens.length-1].text === ' ') {
+                   const popSpace = currentLine.tokens.pop();
+                   ctx.font = _getFontStr(popSpace.style);
+                   currentLine.w -= this._measureTextWithSpacing(ctx, ' ', letterSpacing);
+                }
+
+                lines.push(currentLine);
+                currentLine = { tokens: [tok], w: mw, maxAscent: asc, maxDescent: desc, maxFs: tok.style.fontsize };
+            } else {
+                currentLine.tokens.push(tok);
+                currentLine.w += mw;
+                currentLine.maxAscent = Math.max(currentLine.maxAscent, asc);
+                currentLine.maxDescent = Math.max(currentLine.maxDescent, desc);
+                currentLine.maxFs = Math.max(currentLine.maxFs, tok.style.fontsize);
+            }
+        }
+        if (currentLine.tokens.length > 0 || tokens.length === 0) {
+            lines.push(currentLine);
+        }
+
+        // 4. 定位与边距计算
+        const maxLineW = Math.max(...lines.map(l => l.w));
+        const lineSpacing = s.line_spacing || 0;
+        let totalH = 0;
+        lines.forEach(l => {
+            // fallback 高度
+            if (l.maxAscent === 0) { l.maxFs = baseStyleConfig.fontsize; l.maxAscent = l.maxFs * 0.8; l.maxDescent = l.maxFs * 0.2; }
+            l.lineH = l.maxAscent + l.maxDescent;
+            totalH += l.lineH + lineSpacing;
+        });
+        totalH -= lineSpacing > 0 ? lineSpacing : 0; 
+        if (totalH < 0) totalH = 0;
+
+        let cx, cy;
+        if (advEnabled) {
+            cx = advX + advW / 2;
+            cy = advY + advH / 2;
+        } else {
+            cx = typeof s.pos_x === 'number' && s.pos_x <= 1 ? s.pos_x * videoW : (s.pos_x || videoW / 2);
+            cy = typeof s.pos_y === 'number' && s.pos_y <= 1 ? s.pos_y * videoH : (s.pos_y || videoH * 0.85);
+        }
+
+        const effectivePadX = (s.box_padding_x || 12) + (s.border_width || 3);
+        const effectivePadY = (s.box_padding_y || 8) + (s.border_width || 3);
+
+        ctx.save();
+        const rotation = s.rotation || 0;
+        if (rotation !== 0) {
+            ctx.translate(cx, cy);
+            ctx.rotate(rotation * Math.PI / 180);
+            ctx.translate(-cx, -cy);
+        }
+
+        // 5. 绘制基础背景框
+        if (s.box_opacity > 0) {
+            let bX, bY, bW, bH;
+            if (advEnabled) {
+                bX = advX; bY = advY; bW = advW; bH = advH;
+            } else {
+                bX = cx - maxLineW / 2 - effectivePadX;
+                bY = cy - totalH / 2 - effectivePadY;
+                bW = maxLineW + effectivePadX * 2;
+                bH = totalH + effectivePadY * 2;
+            }
+
+            ctx.save();
+            ctx.globalAlpha = Math.min(1, s.box_opacity / 255);
+            ctx.fillStyle = s.bg_color || '#000000';
+
+            const r = s.box_radius || 0;
+            if (r > 0) {
+                this._roundRect(ctx, bX, bY, bW, bH, r);
+                ctx.fill();
+            } else {
+                ctx.fillRect(bX, bY, bW, bH);
+            }
+            ctx.restore();
+        }
+
+        // 6. 全局属性（透明度、描边、阴影）
+        const textAlpha = Math.min(1, Math.max(0, s.opacity !== undefined ? s.opacity / 255 : 1));
+        const useStroke = s.use_stroke !== false;
+        const outlineColor = s.color_outline || '#000000';
+        const outlineAlpha = s.opacity_outline !== undefined ? s.opacity_outline / 255 : 1;
+        const borderW = s.border_width || 3;
+        
+        const shadowBlur = s.shadow_blur || 0;
+        const shadowOffX = s.shadow_off_x || 0;
+        const shadowOffY = s.shadow_off_y || 0;
+        const shadowColor = s.shadow_color || '#000000';
+        const shadowAlpha = s.shadow_opacity !== undefined ? s.shadow_opacity / 255 : 0;
+
+        ctx.globalAlpha = ctx.globalAlpha * textAlpha;
+
+        // 7. 处理多行逐行绘制
+        let startY;
+        if (advEnabled) {
+            const valign = (s.advanced_textbox_valign || 'center').toLowerCase();
+            if (valign === 'top') startY = advY;
+            else if (valign === 'bottom') startY = advY + advH - totalH;
+            else startY = cy - totalH / 2;
+        } else {
+            startY = cy - totalH / 2;
+        }
+
+        let currY = startY;
+        for (const line of lines) {
+            // align
+            let renderX = 0;
+            if (advEnabled && advAlign === 'left') renderX = advX;
+            else if (advEnabled && advAlign === 'right') renderX = advX + advW - line.w;
+            else renderX = cx - line.w / 2;
+
+            // 保持 baseline 统一，以这一行最大 ascent 为基线起点
+            const baselineY = currY + line.maxAscent;
+
+            for (const tok of line.tokens) {
+                if (tok.text === ' ') {
+                    ctx.font = _getFontStr(tok.style);
+                    renderX += this._measureTextWithSpacing(ctx, ' ', letterSpacing);
+                    continue;
+                }
+
+                ctx.font = _getFontStr(tok.style);
+                
+                // --- 背景高亮（独立的单个文本块高亮处理，如果有设定的独立背景色） ---
+                if (tok.style.bg_color) {
+                    ctx.save();
+                    ctx.fillStyle = tok.style.bg_color;
+                    ctx.globalAlpha = textAlpha * (tok.style.bg_opacity !== undefined ? tok.style.bg_opacity : 0.8);
+                    const bw = this._measureTextWithSpacing(ctx, tok.text, letterSpacing);
+                    const fs = tok.style.fontsize || baseStyleConfig.fontsize;
+                    ctx.fillRect(renderX - 2, baselineY - fs * 0.8 - 2, bw + 4, fs + 4);
+                    ctx.restore();
+                }
+
+                // --- 绘制阴影 ---
+                if (shadowAlpha > 0 && (shadowBlur > 0 || shadowOffX !== 0 || shadowOffY !== 0)) {
+                    ctx.save();
+                    ctx.globalAlpha = textAlpha * shadowAlpha;
+                    ctx.fillStyle = shadowColor;
+                    if (shadowBlur > 0) {
+                        ctx.shadowColor = shadowColor;
+                        ctx.shadowBlur = shadowBlur;
+                        ctx.shadowOffsetX = shadowOffX;
+                        ctx.shadowOffsetY = shadowOffY;
+                    }
+                    ctx.textBaseline = 'alphabetic';
+                    if (letterSpacing > 0) {
+                        this._fillTextSpaced(ctx, tok.text, renderX + (shadowBlur > 0 ? 0 : shadowOffX), baselineY + (shadowBlur > 0 ? 0 : shadowOffY), letterSpacing);
+                    } else {
+                        ctx.fillText(tok.text, renderX + (shadowBlur > 0 ? 0 : shadowOffX), baselineY + (shadowBlur > 0 ? 0 : shadowOffY));
+                    }
+                    ctx.restore();
+                }
+
+                // --- 绘制描边 ---
+                const tokStrokeC = tok.style.color_outline || outlineColor;
+                const tokStrokeW = tok.style.border_width !== undefined ? tok.style.border_width : borderW;
+                if (useStroke && tokStrokeW > 0) {
+                    ctx.save();
+                    ctx.globalAlpha = textAlpha * outlineAlpha;
+                    ctx.strokeStyle = tokStrokeC;
+                    ctx.lineWidth = tokStrokeW * 2;
+                    ctx.lineJoin = 'round';
+                    ctx.miterLimit = 2;
+                    ctx.textBaseline = 'alphabetic';
+                    
+                    if (letterSpacing > 0) {
+                        this._strokeTextSpaced(ctx, tok.text, renderX, baselineY, letterSpacing);
+                    } else {
+                        ctx.strokeText(tok.text, renderX, baselineY);
+                    }
+                    ctx.restore();
+                }
+
+                // --- 绘制实体文字 ---
+                ctx.save();
+                ctx.fillStyle = tok.style.color || baseStyleConfig.color;
+                ctx.textBaseline = 'alphabetic';
+                if (letterSpacing > 0) {
+                    this._fillTextSpaced(ctx, tok.text, renderX, baselineY, letterSpacing);
+                } else {
+                    ctx.fillText(tok.text, renderX, baselineY);
+                }
+                
+                renderX += this._measureTextWithSpacing(ctx, tok.text, letterSpacing);
+                ctx.restore();
+            }
+
+            currY += line.lineH + lineSpacing;
+        }
+
+        ctx.restore();
     }
 }
 

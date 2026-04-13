@@ -71,6 +71,12 @@ class ReelsTimelineEditor {
         this.onSeek = null;           // (timeSec) => {}
         this.onClipSelect = null;     // (trackIdx, clipIdx, clip) => {}
         this.onClipChange = null;     // (trackIdx, clipIdx, clip) => {}
+        this.onClipDblClick = null;   // (trackIdx, clipIdx, clip, rect) => {}
+
+        // 浮动编辑器
+        this._editingPopup = null;
+        this._lastClickTime = 0;
+        this._lastClickClip = null;
 
         this._init();
     }
@@ -91,6 +97,13 @@ class ReelsTimelineEditor {
         window.addEventListener('mouseup', (e) => this._onMouseUp(e));
         
         this.canvas.addEventListener('wheel', (e) => this._onWheel(e), { passive: false });
+
+        // 点击画布其他区域时关闭编辑器
+        document.addEventListener('mousedown', (e) => {
+            if (this._rtEditor && this._rtEditor.popup && !this._rtEditor.popup.contains(e.target) && e.target !== this.canvas) {
+                this._rtEditor.close(true);
+            }
+        });
 
         // 尺寸
         this._resize();
@@ -493,6 +506,27 @@ class ReelsTimelineEditor {
         if (hitInfo) {
             this._selectedClip = { trackIdx: hitInfo.trackIdx, clipIdx: hitInfo.clipIdx };
             const clip = this._tracks[hitInfo.trackIdx].clips[hitInfo.clipIdx];
+            const track = this._tracks[hitInfo.trackIdx];
+
+            // ── 双击检测 ──
+            const now = Date.now();
+            const clipKey = `${hitInfo.trackIdx}_${hitInfo.clipIdx}`;
+            if (now - this._lastClickTime < 400 && this._lastClickClip === clipKey) {
+                // 双击 → 打开字幕编辑
+                this._lastClickTime = 0;
+                this._lastClickClip = null;
+                if (track.type === 'subs') {
+                    const clipRect = this._getClipScreenRect(hitInfo.trackIdx, hitInfo.clipIdx);
+                    if (this.onClipDblClick) {
+                        this.onClipDblClick(hitInfo.trackIdx, hitInfo.clipIdx, clip, clipRect);
+                    } else {
+                        this._openSubtitleEditor(hitInfo.trackIdx, hitInfo.clipIdx, clip, clipRect);
+                    }
+                }
+                return;
+            }
+            this._lastClickTime = now;
+            this._lastClickClip = clipKey;
 
             if (hitInfo.zone === 'start') {
                 this._drag = { type: 'trim_start', trackIdx: hitInfo.trackIdx, clipIdx: hitInfo.clipIdx, origStart: clip.start, mx0: mx };
@@ -627,6 +661,77 @@ class ReelsTimelineEditor {
         if (this.onSeek) this.onSeek(this._playheadPos);
     }
 
+    /** 获取片段在屏幕上的绝对像素矩形 */
+    _getClipScreenRect(trackIdx, clipIdx) {
+        const canvasRect = this.canvas.getBoundingClientRect();
+        const clip = this._tracks[trackIdx]?.clips[clipIdx];
+        if (!clip) return { x: 0, y: 0, w: 100, h: TL_TRACK_HEIGHT };
+
+        let trackY = TL_RULER_H - this._scrollY;
+        for (let ti = 0; ti < trackIdx; ti++) {
+            trackY += TL_TRACK_HEIGHT + 1;
+            if (ti < this._tracks.length - 1 &&
+                (this._tracks[ti].domain || 'visual') === 'visual' &&
+                (this._tracks[ti + 1]?.domain || 'visual') === 'audio') {
+                trackY += 4;
+            }
+        }
+        const clipX = TL_HEADER_W + clip.start * this._pxPerSec - this._scrollX;
+        const clipW = Math.max(TL_MIN_CLIP_W, (clip.end - clip.start) * this._pxPerSec);
+        return {
+            x: canvasRect.left + clipX,
+            y: canvasRect.top + trackY,
+            w: clipW,
+            h: TL_TRACK_HEIGHT,
+        };
+    }
+
+    // ═══════════════════════════════════════════════
+    // 浮动字幕编辑器
+    // ═══════════════════════════════════════════════
+
+    _openSubtitleEditor(trackIdx, clipIdx, clip, rect) {
+        if (this._rtEditor) {
+            this._rtEditor.close(false);
+        }
+
+        const rtEditor = new ReelsRichTextEditor();
+        this._rtEditor = rtEditor;
+
+        rtEditor.onSave = (newText, newRanges) => {
+            const track = this._tracks[trackIdx];
+            if (track && track.clips[clipIdx]) {
+                const oldName = track.clips[clipIdx].name;
+                track.clips[clipIdx].name = newText;
+                if (this.onSubtitleEdit) {
+                    this.onSubtitleEdit(trackIdx, clipIdx, newText, oldName, newRanges);
+                }
+            }
+            this._rtEditor = null;
+        };
+
+        rtEditor.onCancel = () => {
+            this._rtEditor = null;
+        };
+
+        rtEditor.open({
+            title: `✎ 编辑字幕 #${clipIdx + 1}`,
+            text: clip.name || '',
+            styled_ranges: clip.styled_ranges || [], // newly passed styled_ranges
+            rect: rect,
+            trackIdx,
+            clipIdx
+        });
+    }
+
+    _closeSubtitleEditor(save) {
+        if (this._rtEditor) {
+            this._rtEditor.close(save);
+        }
+    }
+
+
+
     _calcRulerStep() {
         const minStepPx = 60;
         const steps = [0.1, 0.25, 0.5, 1, 2, 5, 10, 15, 30, 60, 120, 300];
@@ -677,6 +782,127 @@ class ReelsTimelineEditor {
             height: 100%;
             background: ${TL_COLORS.bg};
             border-radius: 8px;
+        }
+
+        /* ── 浮动字幕编辑器 ── */
+        .rte-subtitle-editor {
+            position: fixed;
+            z-index: 99999;
+            background: linear-gradient(135deg, #1e2233, #232740);
+            border: 1px solid rgba(100, 140, 255, 0.35);
+            border-radius: 10px;
+            box-shadow: 0 8px 32px rgba(0,0,0,0.55), 0 0 0 1px rgba(255,255,255,0.05) inset;
+            overflow: hidden;
+            animation: rte-se-appear 0.15s ease-out;
+            backdrop-filter: blur(12px);
+        }
+        @keyframes rte-se-appear {
+            from { opacity: 0; transform: translateY(6px) scale(0.97); }
+            to   { opacity: 1; transform: translateY(0) scale(1); }
+        }
+        .rte-subtitle-editor.rte-se-closing {
+            animation: rte-se-disappear 0.15s ease-in forwards;
+        }
+        @keyframes rte-se-disappear {
+            from { opacity: 1; transform: scale(1); }
+            to   { opacity: 0; transform: scale(0.95); }
+        }
+        .rte-se-header {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 7px 10px;
+            background: rgba(255,255,255,0.04);
+            border-bottom: 1px solid rgba(255,255,255,0.07);
+            cursor: default;
+        }
+        .rte-se-title {
+            font-size: 12px;
+            font-weight: 600;
+            color: #c8d0e0;
+        }
+        .rte-se-time {
+            font-size: 10px;
+            color: #7a8ba8;
+            font-family: monospace;
+            margin-left: auto;
+        }
+        .rte-se-close {
+            width: 20px; height: 20px;
+            border: none; background: transparent;
+            color: #8899aa; font-size: 12px;
+            cursor: pointer; border-radius: 4px;
+            display: flex; align-items: center; justify-content: center;
+            transition: all 0.15s;
+        }
+        .rte-se-close:hover {
+            background: rgba(255,80,80,0.2); color: #ff6b6b;
+        }
+        .rte-se-toolbar {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            padding: 6px 10px;
+            background: rgba(0,0,0,0.2);
+            border-bottom: 1px solid rgba(255,255,255,0.05);
+        }
+        .rt-btn {
+            background: transparent; border: 1px solid rgba(255,255,255,0.1);
+            color: #ddd; padding: 2px 6px; border-radius: 4px; font-size: 12px;
+            cursor: pointer; transition: 0.1s;
+            display: flex; align-items: center; justify-content: center; min-width: 24px;
+        }
+        .rt-btn:hover { background: rgba(255,255,255,0.1); }
+        .rt-btn.active { background: rgba(76,158,255,0.4); border-color: #4c9eff; color: #fff; }
+        .rt-divider { width: 1px; height: 14px; background: rgba(255,255,255,0.15); margin: 0 2px; }
+        .rt-select {
+            background: rgba(0,0,0,0.3); border: 1px solid rgba(255,255,255,0.1); color: #ddd;
+            padding: 2px 4px; border-radius: 4px; font-size: 11px; outline: none;
+        }
+        .rt-color-picker {
+            width: 24px; height: 24px; border: none; background: transparent; padding: 0; cursor: pointer;
+        }
+        /* 取代原来的 textarea，使用 contenteditable */
+        .rte-se-contenteditable {
+            display: block;
+            width: 100%; box-sizing: border-box;
+            padding: 10px 12px;
+            border: none; outline: none;
+            min-height: 52px; max-height: 240px;
+            overflow-y: auto;
+            line-height: 1.5;
+            background: rgba(0,0,0,0.25);
+            caret-color: #4c9eff;
+        }
+        .rte-se-contenteditable::selection, .rte-se-contenteditable *::selection {
+            background: rgba(76,158,255,0.4);
+        }
+        .rte-se-contenteditable:focus {
+            background: rgba(0,0,0,0.35);
+        }
+        .rte-se-footer {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 5px 10px;
+            background: rgba(255,255,255,0.02);
+            border-top: 1px solid rgba(255,255,255,0.06);
+        }
+        .rte-se-hint {
+            font-size: 10px;
+            color: #5a6a80;
+        }
+        .rte-se-save {
+            padding: 3px 12px;
+            border: none; border-radius: 5px;
+            background: linear-gradient(135deg, #3a6ef0, #4c9eff);
+            color: #fff; font-size: 11px; font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        .rte-se-save:hover {
+            background: linear-gradient(135deg, #4a7eff, #5cafff);
+            box-shadow: 0 2px 10px rgba(76,158,255,0.4);
         }
     `;
     document.head.appendChild(style);

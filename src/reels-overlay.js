@@ -241,6 +241,10 @@ function createTextCardOverlay(opts = {}) {
         anim_out_type: opts.anim_out_type || 'none',
         anim_in_duration: opts.anim_in_duration || 0.3,
         anim_out_duration: opts.anim_out_duration || 0.3,
+        // ── 富文本样式范围 ──
+        title_styled_ranges: opts.title_styled_ranges || null,
+        body_styled_ranges: opts.body_styled_ranges || null,
+        footer_styled_ranges: opts.footer_styled_ranges || null,
     };
 }
 
@@ -1397,12 +1401,18 @@ function _drawTextCardOverlay(ctx, ov, x, y, w, h, canvasW, canvasH, currentTime
                 ctx.lineJoin = 'round';
                 ctx.strokeText(line, lx, ty);
             }
-            if (!indep && ov.title_color_from_style) {
-                ctx.fillStyle = _resolveTitleColor(ov.title_color_from_style);
+            // ── 富文本检测 ──
+            if (ov.title_styled_ranges && ov.title_styled_ranges.length > 0 && typeof ReelsRichText !== 'undefined') {
+                _drawRichLine(ctx, line, ov.title_text, ov.title_styled_ranges, lx, ty,
+                    ov.title_color || '#1A1A1A', titleFontSize, titleFamily, titleFallback, titleWeight, ov.title_letter_spacing || 0);
             } else {
-                ctx.fillStyle = ov.title_color || '#1A1A1A';
+                if (!indep && ov.title_color_from_style) {
+                    ctx.fillStyle = _resolveTitleColor(ov.title_color_from_style);
+                } else {
+                    ctx.fillStyle = ov.title_color || '#1A1A1A';
+                }
+                ctx.fillText(line, lx, ty);
             }
-            ctx.fillText(line, lx, ty);
             ty += titleLineH;
         }
         ctx.restore();
@@ -1470,8 +1480,14 @@ function _drawTextCardOverlay(ctx, ov, x, y, w, h, canvasW, canvasH, currentTime
                 ctx.lineJoin = 'round';
                 ctx.strokeText(line, lx, by);
             }
-            ctx.fillStyle = ov.body_color || '#333333';
-            ctx.fillText(line, lx, by);
+            // ── 富文本检测 ──
+            if (ov.body_styled_ranges && ov.body_styled_ranges.length > 0 && typeof ReelsRichText !== 'undefined') {
+                _drawRichLine(ctx, line, ov.body_text, ov.body_styled_ranges, lx, by,
+                    ov.body_color || '#333333', bodyFontSize, bodyFamily, bodyFallback, bodyWeight, ov.body_letter_spacing || 0);
+            } else {
+                ctx.fillStyle = ov.body_color || '#333333';
+                ctx.fillText(line, lx, by);
+            }
             by += bodyLineH;
         }
         ctx.restore();
@@ -1539,8 +1555,14 @@ function _drawTextCardOverlay(ctx, ov, x, y, w, h, canvasW, canvasH, currentTime
                 ctx.lineJoin = 'round';
                 ctx.strokeText(line, lx, fy);
             }
-            ctx.fillStyle = ov.footer_color || '#666666';
-            ctx.fillText(line, lx, fy);
+            // ── 富文本检测 ──
+            if (ov.footer_styled_ranges && ov.footer_styled_ranges.length > 0 && typeof ReelsRichText !== 'undefined') {
+                _drawRichLine(ctx, line, ov.footer_text, ov.footer_styled_ranges, lx, fy,
+                    ov.footer_color || '#666666', footerFontSize, footerFamily, footerFallback, footerWeight, ov.footer_letter_spacing || 0);
+            } else {
+                ctx.fillStyle = ov.footer_color || '#666666';
+                ctx.fillText(line, lx, fy);
+            }
             fy += footerLineH;
         }
         ctx.restore();
@@ -2254,6 +2276,65 @@ function _drawTextLines(ctx, lines, boxX, boxY, boxW, lineHeight, align, color) 
         const lx = _alignX(ctx, line, boxX, boxW, align);
         ctx.fillText(line, lx, yc);
         yc += lineHeight;
+    }
+}
+
+/**
+ * 绘制一行富文本（覆层 textcard 用）
+ * 在已有的行级渲染中替换 fillText，按 styled_ranges 分段渲染。
+ * 
+ * @param {CanvasRenderingContext2D} ctx
+ * @param {string} lineText       本行文字
+ * @param {string} fullText       完整段落文字（用于定位 lineText 在 fullText 中的偏移）
+ * @param {Array}  styledRanges   styled_ranges 数组
+ * @param {number} x              行起点 X
+ * @param {number} y              行基线 Y
+ * @param {string} defaultColor   默认颜色
+ * @param {number} baseFontSize   基础字号
+ * @param {string} fontFamily     字体族
+ * @param {string} fallback       字体 fallback
+ * @param {number} fontWeight     字重
+ * @param {number} letterSpacing  字母间距
+ */
+function _drawRichLine(ctx, lineText, fullText, styledRanges, x, y, defaultColor, baseFontSize, fontFamily, fallback, fontWeight, letterSpacing) {
+    // 定位 lineText 在 fullText 中的字符偏移
+    const lineStart = fullText.indexOf(lineText);
+    if (lineStart < 0) {
+        // fallback: 找不到就原样绘制
+        ctx.fillStyle = defaultColor;
+        ctx.fillText(lineText, x, y);
+        return;
+    }
+    const lineEnd = lineStart + lineText.length;
+
+    const baseStyle = {
+        fontsize: baseFontSize,
+        color: defaultColor,
+        bold: (fontWeight >= 700),
+    };
+
+    // 利用 ReelsRichText.splitByRanges 对整段文字做切片，然后只取落入本行的部分
+    const allChunks = ReelsRichText.splitByRanges(fullText, styledRanges, baseStyle);
+    
+    let cx = x;
+    for (const chunk of allChunks) {
+        // 计算 chunk 与本行的交集
+        const overlapStart = Math.max(chunk.start, lineStart);
+        const overlapEnd = Math.min(chunk.end, lineEnd);
+        if (overlapStart >= overlapEnd) continue;
+
+        const segText = fullText.substring(overlapStart, overlapEnd);
+        if (!segText) continue;
+
+        // 设置该 token 的字体
+        const tokFs = chunk.style.fontsize || baseFontSize;
+        const tokBold = chunk.style.bold ? 700 : fontWeight;
+        const tokFont = `${tokBold} ${tokFs}px "${fontFamily}", ${fallback}`;
+        ctx.font = tokFont;
+        ctx.fillStyle = chunk.style.color || defaultColor;
+        
+        ctx.fillText(segText, cx, y);
+        cx += ctx.measureText(segText).width;
     }
 }
 
