@@ -5,14 +5,33 @@ on:
     tags:
       - 'v*'
 
-permissions:
-  id-token: write
-  contents: write
-  attestations: write
-
 jobs:
   build:
-    runs-on: macos-latest
+    strategy:
+      matrix:
+        include:
+          - os: macos-latest
+            platform: mac
+            build_cmd: npm run pack:mac-universal -- -p never
+            artifact_pattern: |
+              dist-electron/*.dmg
+              dist-electron/*.zip
+              dist-electron/*.yml
+              dist-electron/*.blockmap
+          - os: windows-latest
+            platform: win
+            build_cmd: npm run pack:win-x64 -- -p never
+            artifact_pattern: |
+              dist-electron/*.exe
+              dist-electron/*.yml
+              dist-electron/*.blockmap
+
+    runs-on: ${{ matrix.os }}
+
+    permissions:
+      id-token: write
+      contents: write
+      attestations: write
 
     steps:
       - uses: actions/checkout@v4
@@ -26,7 +45,7 @@ jobs:
         run: npm install
 
       - name: Build App
-        run: npm run pack:mac-universal -- -p never
+        run: ${{ matrix.build_cmd }}
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
@@ -36,15 +55,31 @@ jobs:
           subject-path: |
             dist-electron/*.dmg
             dist-electron/*.zip
+            dist-electron/*.exe
             dist-electron/*.yml
             dist-electron/*.blockmap
+
+      - name: Upload Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-${{ matrix.platform }}
+          path: ${{ matrix.artifact_pattern }}
+
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
 
       - name: Create Release
         uses: softprops/action-gh-release@v2
         with:
-          files: |
-            dist-electron/*.dmg
-            dist-electron/*.zip
-            dist-electron/*.yml
-            dist-electron/*.blockmap
+          files: dist/**/*
           generate_release_notes: true

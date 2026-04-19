@@ -356,10 +356,19 @@ function _initLangPicker(container) {
 // 4. Render the batch table
 // ═══════════════════════════════════════════════════════
 
+let _isRenderingBatchTable = false; // 防止 _applyBatchTableChanges 与 _renderBatchTable 互相触发
+
 function _renderBatchTable() {
     const container = _batchTableState.container;
     const state = window._reelsState;
     if (!state) return;
+
+    // ── 重绘前先保存所有输入框的值到 task 对象，防止未保存内容丢失 ──
+    if (!_isRenderingBatchTable) {
+        _isRenderingBatchTable = true;
+        try { _applyBatchTableChanges(); } catch(e) { console.warn('[BatchTable] applyChanges error:', e); }
+        _isRenderingBatchTable = false;
+    }
 
     // ── 保存滚动位置（在 innerHTML 销毁前） ──
     const oldScrollWrap = container.querySelector('.rbt-table-wrap');
@@ -2878,6 +2887,7 @@ function _bindBatchTableEvents() {
         const scrollWrap = container.querySelector('.rbt-table-wrap');
         const scrollTop = scrollWrap ? scrollWrap.scrollTop : 0;
         const scrollLeft = scrollWrap ? scrollWrap.scrollLeft : 0;
+        _applyBatchTableChanges(); // 先保存所有输入框的值，防止重绘时丢失
         _renderBatchTable();
         const newScrollWrap = container.querySelector('.rbt-table-wrap');
         if (newScrollWrap) {
@@ -2935,6 +2945,12 @@ function _bindBatchTableEvents() {
             else if (fieldCategory === 'ttsText') task.ttsText = str;
             else if (fieldCategory === 'txtContent') { task.txtContent = str; task.aligned = false; }
             else if (fieldCategory === 'ttsVoiceId') task.ttsVoiceId = str;
+            else if (fieldCategory === 'exportName') task.exportName = str;
+            else if (fieldCategory === 'cover_text') {
+                if (!task.cover) task.cover = { enabled: true, overlays: [] };
+                if (task.cover.overlays && task.cover.overlays.length > 0) task.cover.overlays[0].title_text = str;
+                else task.cover.overlays = [{ title_text: str, body_text: '', footer_text: '', type: 'textcard' }];
+            }
             else if (fieldCategory.startsWith('overlay_') || fieldCategory.startsWith('scroll_')) {
                 _applyOverlayField(task, fieldCategory, str);
             }
@@ -2957,6 +2973,10 @@ function _bindBatchTableEvents() {
                     else if (fieldCategory === 'ttsText') newTask.ttsText = str;
                     else if (fieldCategory === 'txtContent') { newTask.txtContent = str; }
                     else if (fieldCategory === 'ttsVoiceId') newTask.ttsVoiceId = str;
+                    else if (fieldCategory === 'exportName') newTask.exportName = str;
+                    else if (fieldCategory === 'cover_text') {
+                        newTask.cover = { enabled: true, overlays: [{ title_text: str, body_text: '', footer_text: '', type: 'textcard' }] };
+                    }
                     else if (fieldCategory.startsWith('overlay_') || fieldCategory.startsWith('scroll_')) {
                         _applyOverlayField(newTask, fieldCategory, str);
                     }
@@ -2965,6 +2985,8 @@ function _bindBatchTableEvents() {
                 }
             }
         }
+
+        _applyBatchTableChanges(); // 先保存所有输入框的值，防止重绘时丢失
 
         const scrollWrap = container.querySelector('.rbt-table-wrap');
         const scrollTop = scrollWrap ? scrollWrap.scrollTop : 0;
@@ -3627,10 +3649,12 @@ function _showMultiColumnPasteModal(tsvRows, startIdx, initialFieldCategory = nu
     
     const FIELD_OPTS = [
         { v: '', l: '-- 不导入 (忽略) --' },
+        { v: 'exportName', l: '📝 导出命名' },
+        { v: 'cover_text', l: '🌟 封面文案' },
         { v: 'aiScript', l: '🧠 AI 原文案' },
         { v: 'ttsText', l: '🤖 TTS文案' },
         { v: 'ttsVoiceId', l: '🗣️ TTS音色' },
-        { v: 'txtContent', l: '📝 人声字幕' },
+        { v: 'txtContent', l: '📃 人声字幕' },
         { v: 'overlay_title', l: '🔠 覆层标题' },
         { v: 'overlay_body', l: '🔠 覆层内容' },
         { v: 'overlay_footer', l: '🔠 覆层结尾' },
@@ -3754,6 +3778,12 @@ function _execMultiColumnPaste(tsvRows, startIdx, colMappings, maxCols) {
             else if (fieldCategory === 'ttsText') task.ttsText = str;
             else if (fieldCategory === 'txtContent') { task.txtContent = str; task.aligned = false; }
             else if (fieldCategory === 'ttsVoiceId') task.ttsVoiceId = str;
+            else if (fieldCategory === 'exportName') task.exportName = str;
+            else if (fieldCategory === 'cover_text') {
+                if (!task.cover) task.cover = { enabled: true, overlays: [] };
+                if (task.cover.overlays && task.cover.overlays.length > 0) task.cover.overlays[0].title_text = str;
+                else task.cover.overlays = [{ title_text: str, body_text: '', footer_text: '', type: 'textcard' }];
+            }
             else if (fieldCategory.startsWith('overlay_') || fieldCategory.startsWith('scroll_')) {
                 _applyOverlayField(task, fieldCategory, str);
             }
@@ -3762,6 +3792,8 @@ function _execMultiColumnPaste(tsvRows, startIdx, colMappings, maxCols) {
         if(rowModified) filled++;
     }
     
+    _applyBatchTableChanges(); // 先保存所有输入框的值，防止重绘时丢失
+
     const scrollWrap = container.querySelector('.rbt-table-wrap');
     const scrollTop = scrollWrap ? scrollWrap.scrollTop : 0;
     const scrollLeft = scrollWrap ? scrollWrap.scrollLeft : 0;
@@ -5222,6 +5254,12 @@ function _showColumnSettingsPopup(anchor) {
             onmouseout="this.style.background='#1e1e38';this.style.borderColor='#333';this.style.color='#ccc'"
         >${p.name}</button>`;
     }
+    // 显示完整（全部列）按钮
+    html += `<button id="rbt-col-preset-showall" title="显示所有列"
+        style="padding:3px 10px;border-radius:4px;border:1px solid #50c878;background:rgba(80,200,120,0.1);color:#50c878;font-size:11px;cursor:pointer;transition:all .15s;white-space:nowrap;font-weight:600;"
+        onmouseover="this.style.background='rgba(80,200,120,0.25)';this.style.color='#6fea9d'"
+        onmouseout="this.style.background='rgba(80,200,120,0.1)';this.style.color='#50c878'"
+    >📋 显示完整</button>`;
     html += '</div></div>';
 
     // ── Categorized columns ──
@@ -5303,6 +5341,14 @@ function _showColumnSettingsPopup(anchor) {
             _applyColVisibility();
             _syncCheckboxes();
         });
+    });
+
+    // Event: 显示完整（全部列）
+    popup.querySelector('#rbt-col-preset-showall')?.addEventListener('click', () => {
+        for (const col of _RBT_COLUMNS) vis[col.key] = true;
+        _saveColVisibility(vis);
+        _applyColVisibility();
+        _syncCheckboxes();
     });
 
     // Event: checkbox change
