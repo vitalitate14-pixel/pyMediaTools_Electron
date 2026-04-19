@@ -44,6 +44,38 @@ jobs:
       - name: Install dependencies
         run: npm install
 
+      # ── macOS: 下载 ffmpeg 到 vendor/darwin/ffmpeg ──
+      - name: Download ffmpeg (macOS)
+        if: matrix.platform == 'mac'
+        run: |
+          mkdir -p vendor/darwin/ffmpeg/bin
+          brew install ffmpeg
+          cp $(which ffmpeg) vendor/darwin/ffmpeg/bin/ffmpeg
+          cp $(which ffprobe) vendor/darwin/ffmpeg/bin/ffprobe
+          chmod +x vendor/darwin/ffmpeg/bin/*
+
+      # ── Windows: 下载 ffmpeg 到 vendor/windows/ffmpeg ──
+      - name: Download ffmpeg (Windows)
+        if: matrix.platform == 'win'
+        shell: pwsh
+        run: |
+          $ffmpegUrl = "https://www.gyan.dev/ffmpeg/builds/ffmpeg-release-essentials.zip"
+          $zipFile = "$env:TEMP\ffmpeg.zip"
+          $extractDir = "$env:TEMP\ffmpeg-extract"
+          Write-Host "Downloading ffmpeg..."
+          Invoke-WebRequest -Uri $ffmpegUrl -OutFile $zipFile -UseBasicParsing
+          Write-Host "Extracting ffmpeg..."
+          Expand-Archive -Path $zipFile -DestinationPath $extractDir -Force
+          $ffmpegDir = Get-ChildItem -Path $extractDir -Directory | Select-Object -First 1
+          New-Item -ItemType Directory -Force -Path "vendor\windows\ffmpeg\bin"
+          Copy-Item "$($ffmpegDir.FullName)\bin\ffmpeg.exe" "vendor\windows\ffmpeg\bin\"
+          Copy-Item "$($ffmpegDir.FullName)\bin\ffprobe.exe" "vendor\windows\ffmpeg\bin\"
+          Copy-Item "$($ffmpegDir.FullName)\bin\ffplay.exe" "vendor\windows\ffmpeg\bin\"
+          Copy-Item "$($ffmpegDir.FullName)\LICENSE" "vendor\windows\ffmpeg\" -ErrorAction SilentlyContinue
+          Copy-Item "$($ffmpegDir.FullName)\README.txt" "vendor\windows\ffmpeg\" -ErrorAction SilentlyContinue
+          Write-Host "ffmpeg files:"
+          Get-ChildItem "vendor\windows\ffmpeg\bin"
+
       - name: Build App
         run: ${{ matrix.build_cmd }}
         env:
