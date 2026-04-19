@@ -357,6 +357,7 @@ function _initLangPicker(container) {
 // ═══════════════════════════════════════════════════════
 
 let _isRenderingBatchTable = false; // 防止 _applyBatchTableChanges 与 _renderBatchTable 互相触发
+let _skipNextApply = false; // 粘贴等操作已直接写入 state，跳过 DOM→state 同步防止旧值覆盖
 
 function _renderBatchTable() {
     const container = _batchTableState.container;
@@ -364,7 +365,10 @@ function _renderBatchTable() {
     if (!state) return;
 
     // ── 重绘前先保存所有输入框的值到 task 对象，防止未保存内容丢失 ──
-    if (!_isRenderingBatchTable) {
+    // 但如果是粘贴操作刚直接写过 state，就跳过，避免旧 DOM 值覆盖新数据
+    if (_skipNextApply) {
+        _skipNextApply = false;
+    } else if (!_isRenderingBatchTable) {
         _isRenderingBatchTable = true;
         try { _applyBatchTableChanges(); } catch(e) { console.warn('[BatchTable] applyChanges error:', e); }
         _isRenderingBatchTable = false;
@@ -2545,6 +2549,7 @@ function _bindBatchTableEvents() {
             const scrollTop = scrollWrap ? scrollWrap.scrollTop : 0;
             const scrollLeft = scrollWrap ? scrollWrap.scrollLeft : 0;
             
+            _skipNextApply = true; // 粘贴已直接写入 state，跳过 DOM→state 同步
             _renderBatchTable();
             
             const newScrollWrap = container.querySelector('.rbt-table-wrap');
@@ -2845,6 +2850,9 @@ function _bindBatchTableEvents() {
                     for (const ov of task.overlays) ov.content = '';
                 }
                 break;
+            case 'exportName':
+                task.exportName = '';
+                break;
             default:
                 break;
         }
@@ -2887,7 +2895,7 @@ function _bindBatchTableEvents() {
         const scrollWrap = container.querySelector('.rbt-table-wrap');
         const scrollTop = scrollWrap ? scrollWrap.scrollTop : 0;
         const scrollLeft = scrollWrap ? scrollWrap.scrollLeft : 0;
-        _applyBatchTableChanges(); // 先保存所有输入框的值，防止重绘时丢失
+        _skipNextApply = true; // 清空已直接写入 state
         _renderBatchTable();
         const newScrollWrap = container.querySelector('.rbt-table-wrap');
         if (newScrollWrap) {
@@ -2986,12 +2994,11 @@ function _bindBatchTableEvents() {
             }
         }
 
-        _applyBatchTableChanges(); // 先保存所有输入框的值，防止重绘时丢失
-
         const scrollWrap = container.querySelector('.rbt-table-wrap');
         const scrollTop = scrollWrap ? scrollWrap.scrollTop : 0;
         const scrollLeft = scrollWrap ? scrollWrap.scrollLeft : 0;
         
+        _skipNextApply = true; // 粘贴已直接写入 state，跳过 DOM→state 同步
         _renderBatchTable();
         
         const newScrollWrap = container.querySelector('.rbt-table-wrap');
@@ -3792,12 +3799,12 @@ function _execMultiColumnPaste(tsvRows, startIdx, colMappings, maxCols) {
         if(rowModified) filled++;
     }
     
-    _applyBatchTableChanges(); // 先保存所有输入框的值，防止重绘时丢失
-
+    
     const scrollWrap = container.querySelector('.rbt-table-wrap');
     const scrollTop = scrollWrap ? scrollWrap.scrollTop : 0;
     const scrollLeft = scrollWrap ? scrollWrap.scrollLeft : 0;
     
+    _skipNextApply = true; // 粘贴已直接写入 state，跳过 DOM→state 同步
     _renderBatchTable();
     
     const newScrollWrap = container.querySelector('.rbt-table-wrap');
@@ -4643,6 +4650,7 @@ async function _batchPasteFromSheet() {
         }
     }
 
+    _skipNextApply = true;
     _renderBatchTable();
     if (typeof _renderTaskList === 'function') _renderTaskList();
 
@@ -4783,6 +4791,7 @@ async function _batchPasteScrollFromSheet() {
         }
     }
 
+    _skipNextApply = true;
     _renderBatchTable();
     if (typeof _renderTaskList === 'function') _renderTaskList();
 
@@ -6162,6 +6171,7 @@ function _doCycleFill(fieldKey, items, weights, mode) {
         }
     }
 
+    _skipNextApply = true;
     _renderBatchTable();
     if (typeof _renderTaskList === 'function') _renderTaskList();
     alert(`✅ 已循环填充 ${targetIndices.length} 行的${fieldLabel}`);
@@ -6310,6 +6320,7 @@ async function _batchPasteTTSContent() {
     }
 
     _loadTabTasks(tab);
+    _skipNextApply = true;
     _renderBatchTable();
     if (typeof _renderTaskList === 'function') _renderTaskList();
     alert(`✅ 已成功通过【${mode === 'fill' ? '补全' : (mode === 'overwrite' ? '覆盖' : '新行')}】模式导入 ${addedCount} 条TTS记录`);
@@ -6394,6 +6405,7 @@ async function _batchPasteTxtContent() {
         created++;
     }
 
+    _skipNextApply = true;
     _renderBatchTable();
     if (typeof _renderTaskList === 'function') _renderTaskList();
 
@@ -6471,6 +6483,7 @@ async function _batchPasteAiScript() {
         }
     }
 
+    _skipNextApply = true;
     _renderBatchTable();
     showToast(`✅ 粘贴AI原文案成功：覆盖/填充 ${filled} 行，新建 ${created} 行`, 'success');
 }
@@ -6988,6 +7001,8 @@ function _populateVoiceSelect(inputEl, voices, prevValue) {
 // ═══════════════════════════════════════════════════════
 
 async function _runSingleTTS(idx) {
+    // 先同步 DOM 输入框的值到 state
+    try { _applyBatchTableChanges(); } catch(e) {}
     const state = window._reelsState;
     if (!state || !state.tasks[idx]) return;
     const task = state.tasks[idx];
@@ -7001,6 +7016,7 @@ async function _runSingleTTS(idx) {
     const modelId = localStorage.getItem('rbt_tts_model') || 'eleven_v3';
 
     task.status = 'generating';
+    _skipNextApply = true;
     _renderBatchTable();
     
     try {
@@ -7032,6 +7048,7 @@ async function _runSingleTTS(idx) {
             task.aligned = true; // 既然同时成功了srt，说明是对齐完的结果
         }
         task.status = 'success';
+        _skipNextApply = true;
         _renderBatchTable();
         
         // 5秒后清除成功状态，恢复原样
@@ -7045,6 +7062,7 @@ async function _runSingleTTS(idx) {
         return true;
     } catch (e) {
         task.status = 'error';
+        _skipNextApply = true;
         _renderBatchTable();
         showToast('生成报错: ' + e.message, 'error', 8000);
         return false;
@@ -7052,6 +7070,8 @@ async function _runSingleTTS(idx) {
 }
 
 async function _runTTSBatchProcessing() {
+    // 先同步 DOM 输入框的值到 state，确保能读到用户填入的数据
+    try { _applyBatchTableChanges(); } catch(e) {}
     const indices = _getSelectedIndices();
     const tasks = window._reelsState?.tasks || [];
     if (tasks.length === 0) {
@@ -7096,6 +7116,8 @@ async function _runTTSBatchProcessing() {
 }
 
 async function _runGeminiBatchProcessing() {
+    // 先同步 DOM 输入框的值到 state，确保能读到用户填入的数据
+    try { _applyBatchTableChanges(); } catch(e) {}
     const indices = _getSelectedIndices();
     const tasks = window._reelsState?.tasks || [];
     if (tasks.length === 0) {
@@ -7190,6 +7212,7 @@ async function _runGeminiBatchProcessing() {
         } else {
             console.warn('[AI文案] data.results 不是数组!', data);
         }
+        _skipNextApply = true; // AI 结果已直接写入 state
         _renderBatchTable();
         
         if (count === 0 && payload.length > 0) {
@@ -7312,6 +7335,7 @@ function _applyAiPresetBatch() {
             if (preset.audioDurScale !== undefined && preset.audioDurScale !== 100) task.audioDurScale = preset.audioDurScale;
         }
         overlay.remove();
+        _skipNextApply = true;
         _renderBatchTable();
         showToast(`预设已应用到 ${targetIdxs.length} 行`, 'success');
     });
@@ -7909,6 +7933,7 @@ async function _batchAssignFiles(files, field) {
         }
     }
 
+    _skipNextApply = true;
     _renderBatchTable();
     if (typeof _renderTaskList === 'function') _renderTaskList();
 }
@@ -7985,6 +8010,7 @@ function _batchAssignTxtFiles(files) {
         fallbackIdx++;
     }
 
+    _skipNextApply = true;
     _renderBatchTable();
     if (typeof _renderTaskList === 'function') _renderTaskList();
     alert(`✅ 已分配 ${files.length} 个 TXT 文案文件`);
