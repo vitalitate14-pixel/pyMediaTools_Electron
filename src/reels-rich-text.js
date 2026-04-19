@@ -288,6 +288,70 @@ const ReelsRichText = (() => {
     }
 
     // ══════════════════════════════════════════════
+    //  自动着色 (Auto Colorize)
+    // ══════════════════════════════════════════════
+
+    function autoColorize(text, rules) {
+        if (!text || !rules || rules.length === 0) return [];
+        const ranges = [];
+        for (const rule of rules) {
+            if (!rule.keywords || rule.keywords.length === 0) continue;
+            // 构建正则：转义特殊字符，按长度降序排列（优先匹配长词）
+            const sorted = [...rule.keywords].filter(k => k).sort((a, b) => b.length - a.length);
+            if (sorted.length === 0) continue;
+            const escaped = sorted.map(k => k.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'));
+            const pattern = new RegExp(escaped.join('|'), 'g');
+            let match;
+            while ((match = pattern.exec(text)) !== null) {
+                const r = { start: match.index, end: match.index + match[0].length };
+                if (rule.color) r.color = rule.color;
+                if (rule.bold === true) r.bold = true;
+                if (rule.fontsize && rule.fontsize > 0) r.fontsize = rule.fontsize;
+                if (rule.italic === true) r.italic = true;
+                ranges.push(r);
+            }
+        }
+        return ranges;
+    }
+
+    function mergeAutoAndManual(autoRanges, manualRanges) {
+        if (!autoRanges || autoRanges.length === 0) return manualRanges || [];
+        if (!manualRanges || manualRanges.length === 0) return autoRanges;
+
+        // 收集手动覆盖的区间
+        const manualCovered = (manualRanges || []).map(r => [r.start, r.end]);
+        
+        // 过滤自动范围：仅保留未被手动完全覆盖的部分
+        const filtered = [];
+        for (const ar of autoRanges) {
+            let s = ar.start, e = ar.end;
+            // 检查是否被任何手动范围完全覆盖
+            let fullyManual = false;
+            for (const [ms, me] of manualCovered) {
+                if (ms <= s && me >= e) { fullyManual = true; break; }
+            }
+            if (!fullyManual) {
+                filtered.push(ar);
+            }
+        }
+        return [...filtered, ...manualRanges];
+    }
+
+    const _autoColorCache = new Map();
+    const _AUTO_COLOR_CACHE_MAX = 50;
+    
+    function getCachedAutoColor(text, rules) {
+        if (!text || !rules || rules.length === 0) return [];
+        // 用 text + rules JSON 生成缓存 key
+        const key = text + '||' + JSON.stringify(rules);
+        if (_autoColorCache.has(key)) return _autoColorCache.get(key);
+        const result = autoColorize(text, rules);
+        if (_autoColorCache.size > _AUTO_COLOR_CACHE_MAX) _autoColorCache.clear();
+        _autoColorCache.set(key, result);
+        return result;
+    }
+
+    // ══════════════════════════════════════════════
     //  导出
     // ══════════════════════════════════════════════
 
@@ -300,6 +364,9 @@ const ReelsRichText = (() => {
         splitByRanges,
         compactRanges,
         validateRanges,
+        autoColorize,
+        mergeAutoAndManual,
+        getCachedAutoColor,
     };
 
 })();

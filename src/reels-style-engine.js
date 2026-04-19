@@ -43,6 +43,7 @@ const DEFAULT_SUBTITLE_STYLE = {
     box_padding_y: 8,
     box_radius: 8,
     box_blur: 0,
+    box_adaptive_width: false,
 
     // ── Basic stroke ──
     use_stroke: true,
@@ -51,10 +52,19 @@ const DEFAULT_SUBTITLE_STYLE = {
     color_outline: '#000000',
 
     // ── Dynamic highlight box ──
+    karaoke_highlight: false,
     dynamic_box: false,
     color_high_bg: '#FFD700',
     opacity_high_bg: 0.3,
     dynamic_radius: 6,
+
+    // ── Advanced Typography ──
+    text_transform: 'none',
+
+    // ── Scrolling Lyrics Mode ──
+    scrolling_mode: false,
+    scrolling_visible_lines: 3,
+    scrolling_opacity_context: 0.3,
 
     // ── Shadow ──
     shadow_blur: 4,
@@ -292,6 +302,81 @@ function extractStyleKeys(obj) {
 const PRESET_STORAGE_KEY = 'reels_subtitle_presets';
 const MAX_PRESETS = 50;
 
+const BUILTIN_PRESETS = {
+    // ── 爆贴底框系列 ──
+    "焦糖橙_黄高亮": { karaoke_highlight: true, use_box: true, box_adaptive_width: true, color_bg: "#9D4512", opacity_bg: 255, color_text: "#FFFFFF", color_high: "#F5D678", use_stroke: false, shadow_blur: 0, box_radius: 2, box_padding_x: 16, box_padding_y: 10, font_weight: 900, line_spacing: 1.2 },
+    "深海蓝_黄高亮": { karaoke_highlight: true, use_box: true, box_adaptive_width: true, color_bg: "#0E4B7E", opacity_bg: 255, color_text: "#FFFFFF", color_high: "#F6D371", use_stroke: false, shadow_blur: 0, box_radius: 2, box_padding_x: 16, box_padding_y: 10, font_weight: 900, line_spacing: 1.2 },
+    "暗夜青_青高亮": { karaoke_highlight: true, use_box: true, box_adaptive_width: true, color_bg: "#033045", opacity_bg: 255, color_text: "#FFFFFF", color_high: "#00BFFF", use_stroke: false, shadow_blur: 0, box_radius: 2, box_padding_x: 16, box_padding_y: 10, font_weight: 900, line_spacing: 1.2 },
+    "明亮紫_黄高亮": { karaoke_highlight: true, use_box: true, box_adaptive_width: true, color_bg: "#9D70A8", opacity_bg: 255, color_text: "#FFFFFF", color_high: "#EFE174", use_stroke: false, shadow_blur: 0, box_radius: 2, box_padding_x: 16, box_padding_y: 10, font_weight: 900, line_spacing: 1.2 },
+    "奶油底_藏青高亮": { karaoke_highlight: true, use_box: true, box_adaptive_width: true, color_bg: "#EAD3B3", opacity_bg: 255, color_text: "#FFFFFF", color_high: "#213555", use_stroke: false, shadow_blur: 0, box_radius: 2, box_padding_x: 16, box_padding_y: 10, font_weight: 900, line_spacing: 1.2 },
+    "浅丁香_藏青高亮": { karaoke_highlight: true, use_box: true, box_adaptive_width: true, color_bg: "#B0B6CE", opacity_bg: 255, color_text: "#FFFFFF", color_high: "#2A3A5A", use_stroke: false, shadow_blur: 0, box_radius: 2, box_padding_x: 16, box_padding_y: 10, font_weight: 900, line_spacing: 1.2 },
+    "砖红_金黄高亮": { karaoke_highlight: true, use_box: true, box_adaptive_width: true, color_bg: "#B34A4D", opacity_bg: 255, color_text: "#FFFFFF", color_high: "#FFD700", use_stroke: false, shadow_blur: 0, box_radius: 2, box_padding_x: 16, box_padding_y: 10, font_weight: 900, line_spacing: 1.2 },
+    "亮蓝_明黄高亮": { karaoke_highlight: true, use_box: true, box_adaptive_width: true, color_bg: "#008CDE", opacity_bg: 255, color_text: "#FFFFFF", color_high: "#FFEB3B", use_stroke: false, shadow_blur: 0, box_radius: 2, box_padding_x: 16, box_padding_y: 10, font_weight: 900, line_spacing: 1.2 },
+    "深紫_粉红高亮": { karaoke_highlight: true, use_box: true, box_adaptive_width: true, color_bg: "#350B4D", opacity_bg: 255, color_text: "#FFFFFF", color_high: "#FF80AB", use_stroke: false, shadow_blur: 0, box_radius: 2, box_padding_x: 16, box_padding_y: 10, font_weight: 900, line_spacing: 1.2 },
+    "棕褐_奶黄高亮": { karaoke_highlight: true, use_box: true, box_adaptive_width: true, color_bg: "#8C3B0E", opacity_bg: 255, color_text: "#FFFFFF", color_high: "#FFF59D", use_stroke: false, shadow_blur: 0, box_radius: 2, box_padding_x: 16, box_padding_y: 10, font_weight: 900, line_spacing: 1.2 },
+    "暗蓝灰_薄荷高亮": { karaoke_highlight: true, use_box: true, box_adaptive_width: true, color_bg: "#1D3B4C", opacity_bg: 255, color_text: "#FFFFFF", color_high: "#A7FFEB", use_stroke: false, shadow_blur: 0, box_radius: 2, box_padding_x: 16, box_padding_y: 10, font_weight: 900, line_spacing: 1.2 },
+    
+    // ── 经典系列 ──
+    "逐个大小出字-55": { karaoke_highlight: true, font_family: "Segoe UI", fontsize: 72, color_text: "#FFFFFF", color_high: "#fff701", use_box: false, use_stroke: true, border_width: 6, color_outline: "#3E2723", opacity_outline: 255, shadow_blur: 0, dynamic_box: true, color_high_bg: "#c61e00", opacity_high_bg: 255, dynamic_radius: 8, line_spacing: 1.12, font_weight: 900 },
+    "逐个大小出字-45": { karaoke_highlight: true, font_family: "Segoe UI", fontsize: 45, color_text: "#FFFFFF", color_high: "#fbff00", use_box: false, use_stroke: true, border_width: 6, color_outline: "#0A192F", opacity_outline: 255, dynamic_box: false, shadow_blur: 0, line_spacing: 1.12, font_weight: 900 },
+    "深蓝大底框+红色动画": { karaoke_highlight: true, font_family: "Segoe UI", fontsize: 45, color_text: "#FFFFFF", color_high: "#ffffff", use_box: true, box_adaptive_width: false, color_bg: "#1A2238", opacity_bg: 165, box_radius: 26, box_padding_x: 37, box_padding_y: 15, use_stroke: false, dynamic_box: true, color_high_bg: "#c61e00", opacity_high_bg: 255, dynamic_radius: 7, line_spacing: 1.56, font_weight: 900 },
+    "深褐底框+红色动画": { karaoke_highlight: true, font_family: "Segoe UI", fontsize: 55, color_text: "#FFFFFF", color_high: "#ffffff", use_box: true, box_adaptive_width: true, color_bg: "#2C1E16", opacity_bg: 128, box_radius: 25, box_padding_x: 21, box_padding_y: 6, use_stroke: false, dynamic_box: true, color_high_bg: "#c61e00", opacity_high_bg: 255, dynamic_radius: 9, line_spacing: 1.51, font_weight: 900 },
+    "逐个出字+红色动画": { karaoke_highlight: true, font_family: "Segoe UI", fontsize: 58, color_text: "#FFFFFF", color_high: "#f0f000", use_box: false, use_stroke: true, border_width: 6, color_outline: "#1B1229", opacity_outline: 255, dynamic_box: true, color_high_bg: "#cc0003", opacity_high_bg: 255, dynamic_radius: 8, line_spacing: 1.12, font_weight: 900 },
+    "极简纯文+电光青高亮": { karaoke_highlight: true, font_family: "Segoe UI", fontsize: 56, color_text: "#F0F0F0", color_high: "#00FFFF", use_box: false, use_stroke: true, border_width: 3, color_outline: "#022B3A", opacity_outline: 255, shadow_blur: 8, color_shadow: "#022B3A", opacity_shadow: 204, shadow_offset_x: 3, shadow_offset_y: 3, dynamic_box: false, line_spacing: 1.2, font_weight: 900 },
+    "重金大字+强对比排版": { karaoke_highlight: true, font_family: "Impact", fontsize: 68, color_text: "#FFFFFF", color_high: "#FFD700", use_box: false, use_stroke: true, border_width: 8, color_outline: "#2A241D", opacity_outline: 255, dynamic_box: false, line_spacing: 1.1, font_weight: 900 },
+    "蓝底白字+动感回弹": { karaoke_highlight: true, font_family: "Segoe UI", fontsize: 48, color_text: "#FFFFFF", color_high: "#FFFFFF", use_box: true, box_adaptive_width: true, color_bg: "#1E90FF", opacity_bg: 216, box_radius: 8, box_padding_x: 15, box_padding_y: 6, use_stroke: false, dynamic_box: true, color_high_bg: "#FF0050", opacity_high_bg: 255, dynamic_radius: 8, line_spacing: 1.4, font_weight: 900 },
+    "逐个出字大小-爆贴": { karaoke_highlight: true, font_family: "Segoe UI", fontsize: 72, color_text: "#FFFFFF", color_high: "#fff701", use_box: false, use_stroke: true, border_width: 6, color_outline: "#2D1B4E", opacity_outline: 255, dynamic_box: true, color_high_bg: "#c61e00", opacity_high_bg: 255, dynamic_radius: 8, line_spacing: 1.27, font_weight: 900 },
+
+    // ── 社交风格系列 ──
+    "黑边_粉红高亮": { karaoke_highlight: true, font_family: "Impact", fontsize: 68, color_text: "#FFFFFF", color_high: "#FF69B4", use_box: false, use_stroke: true, border_width: 8, color_outline: "#000000", opacity_outline: 255, shadow_blur: 0, line_spacing: 1.1, font_weight: 900, text_transform: "uppercase" },
+    "黑边_薄荷高亮": { karaoke_highlight: true, font_family: "Impact", fontsize: 68, color_text: "#FFFFFF", color_high: "#00FA9A", use_box: false, use_stroke: true, border_width: 8, color_outline: "#000000", opacity_outline: 255, shadow_blur: 0, line_spacing: 1.1, font_weight: 900, text_transform: "uppercase" },
+    "黑边_电蓝高亮": { karaoke_highlight: true, font_family: "Impact", fontsize: 68, color_text: "#FFFFFF", color_high: "#4169E1", use_box: false, use_stroke: true, border_width: 8, color_outline: "#000000", opacity_outline: 255, shadow_blur: 0, line_spacing: 1.1, font_weight: 900, text_transform: "uppercase" },
+    "滚动歌词_粉高亮": { scrolling_mode: true, scrolling_visible_lines: 3, scrolling_opacity_context: 0.25, karaoke_highlight: true, font_family: "Impact", fontsize: 68, color_text: "#FFFFFF", color_high: "#FF69B4", use_box: false, use_stroke: true, border_width: 8, color_outline: "#000000", opacity_outline: 255, shadow_blur: 0, line_spacing: 1.1, font_weight: 900, text_transform: "uppercase" },
+    "白底框_紫字高亮": { karaoke_highlight: true, font_family: "Segoe UI", fontsize: 60, color_text: "#000000", color_high: "#8A2BE2", use_box: true, box_adaptive_width: true, color_bg: "#FFFFFF", opacity_bg: 255, box_radius: 4, box_padding_x: 20, box_padding_y: 10, use_stroke: false, shadow_blur: 0, line_spacing: 1.2, font_weight: 900, text_transform: "uppercase" },
+    "黑底框_粉字高亮": { karaoke_highlight: true, font_family: "Segoe UI", fontsize: 60, color_text: "#FFFFFF", color_high: "#FF69B4", use_box: true, box_adaptive_width: true, color_bg: "#333333", opacity_bg: 255, box_radius: 4, box_padding_x: 20, box_padding_y: 10, use_stroke: false, shadow_blur: 0, line_spacing: 1.2, font_weight: 900, text_transform: "uppercase" },
+    "软阴影_青字高亮": { karaoke_highlight: true, font_family: "Segoe UI", fontsize: 65, color_text: "#FFFFFF", color_high: "#00FFFF", use_box: false, use_stroke: false, shadow_blur: 12, color_shadow: "#000000", opacity_shadow: 200, shadow_offset_x: 0, shadow_offset_y: 4, line_spacing: 1.2, font_weight: 900, text_transform: "uppercase" },
+    "硬阴影_黄字高亮": { karaoke_highlight: true, font_family: "Segoe UI", fontsize: 65, color_text: "#FFFFFF", color_high: "#FFD700", use_box: false, use_stroke: false, shadow_blur: 0, color_shadow: "#000000", opacity_shadow: 255, shadow_offset_x: 6, shadow_offset_y: 6, line_spacing: 1.2, font_weight: 900, text_transform: "uppercase" },
+    "紫色动态底框": { karaoke_highlight: true, font_family: "Segoe UI", fontsize: 60, color_text: "#FFFFFF", color_high: "#FFFFFF", use_box: false, use_stroke: false, shadow_blur: 4, color_shadow: "#000000", opacity_shadow: 150, shadow_offset_x: 2, shadow_offset_y: 2, dynamic_box: true, color_high_bg: "#7B68EE", opacity_high_bg: 255, dynamic_radius: 8, line_spacing: 1.2, font_weight: 900 },
+    "荧光绿底框_黑字": { karaoke_highlight: true, font_family: "Segoe UI", fontsize: 60, color_text: "#000000", color_high: "#000000", use_box: true, box_adaptive_width: true, color_bg: "#ADFF2F", opacity_bg: 255, box_radius: 6, box_padding_x: 20, box_padding_y: 10, use_stroke: false, shadow_blur: 0, line_spacing: 1.2, font_weight: 900, text_transform: "uppercase" },
+    "纯白发光字": { karaoke_highlight: true, font_family: "Segoe UI", fontsize: 65, color_text: "#FFFFFF", color_high: "#FFFFFF", use_box: false, use_stroke: false, shadow_blur: 15, color_shadow: "#FFFFFF", opacity_shadow: 200, shadow_offset_x: 0, shadow_offset_y: 0, line_spacing: 1.2, font_weight: 900, text_transform: "uppercase" },
+    "粉红发光字": { karaoke_highlight: true, font_family: "Segoe UI", fontsize: 65, color_text: "#FF69B4", color_high: "#FF69B4", use_box: false, use_stroke: false, shadow_blur: 15, color_shadow: "#FF69B4", opacity_shadow: 200, shadow_offset_x: 0, shadow_offset_y: 0, line_spacing: 1.2, font_weight: 900, text_transform: "uppercase" }
+};
+
+// Category mapping for collapsible preset picker
+const PRESET_CATEGORIES = {
+    '🎯 底框样式': ['焦糖橙_黄高亮','深海蓝_黄高亮','暗夜青_青高亮','明亮紫_黄高亮','奶油底_藏青高亮','浅丁香_藏青高亮','砖红_金黄高亮','亮蓝_明黄高亮','深紫_粉红高亮','棕褐_奶黄高亮','暗蓝灰_薄荷高亮','白底框_紫字高亮','黑底框_粉字高亮','荧光绿底框_黑字','深蓝大底框+红色动画','深褐底框+红色动画','粉色气泡','渐变蓝色框','红色警报'],
+    '📝 基础字幕': ['默认白字','黄字黑边 (经典)','上滑入场','左滑入场','黑底白字 (新闻)'],
+    '🎤 卡拉OK高亮': ['卡拉OK高亮','节奏逐词','闪光高亮','黑边_粉红高亮','黑边_薄荷高亮','黑边_电蓝高亮','极简纯文+电光青高亮','重金大字+强对比排版'],
+    '🔥 逐词动态': ['逐个大小出字-55','逐个大小出字-45','逐个出字+红色动画','逐个出字大小-爆贴','蓝底白字+动感回弹','紫色动态底框','逐字放大','逐词弹出(随机大小)','逐词弹出(随机回弹)','Hormozi 风格字幕'],
+    '✨ 特殊动画': ['打字机模式','逐行出现','悬浮漂移','霓虹多层描边','滚动歌词_粉高亮'],
+    '💫 阴影发光': ['阴影沉浸式','软阴影_青字高亮','硬阴影_黄字高亮','圣光降临','纯白发光字','粉红发光字'],
+};
+
+function getPresetsByCategory() {
+    const data = loadSubtitlePresets();
+    const allPresets = data.presets || {};
+    const allNames = Object.keys(allPresets);
+    const categorized = [];
+    const used = new Set();
+
+    // Add categorized built-in presets
+    for (const [catName, presetNames] of Object.entries(PRESET_CATEGORIES)) {
+        const items = presetNames.filter(n => n in allPresets);
+        if (items.length > 0) {
+            categorized.push({ category: catName, names: items });
+            items.forEach(n => used.add(n));
+        }
+    }
+
+    // Add uncategorized (user-saved) presets
+    const uncategorized = allNames.filter(n => !used.has(n));
+    if (uncategorized.length > 0) {
+        categorized.push({ category: '💾 我的预设', names: uncategorized });
+    }
+
+    return { categorized, presetsMap: allPresets };
+}
+
 function _loadPresetsFromStorage() {
     try {
         const raw = localStorage.getItem(PRESET_STORAGE_KEY);
@@ -322,6 +407,11 @@ function loadSubtitlePresets() {
     const data = _loadPresetsFromStorage();
     data.default = extractStyleKeys(data.default);
     const presets = {};
+    // 加载内置预设
+    for (const [name, style] of Object.entries(BUILTIN_PRESETS)) {
+        presets[name] = extractStyleKeys(style);
+    }
+    // 加载用户预设 (覆盖同名内置预设)
     for (const [name, style] of Object.entries(data.presets || {})) {
         presets[name] = extractStyleKeys(style);
     }
@@ -428,6 +518,7 @@ const ReelsStyleEngine = {
     applySubtitlePreset,
     exportSubtitlePresets,
     importSubtitlePresets,
+    getPresetsByCategory,
 };
 
 if (typeof window !== 'undefined') window.ReelsStyleEngine = ReelsStyleEngine;

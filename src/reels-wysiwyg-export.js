@@ -211,13 +211,34 @@ async function reelsWysiwygExport(params) {
             }
         }
         if (!duration || duration <= 0) {
-            log('正在获取背景视频时长...');
-            let rawBgDur = await window.electronAPI.getMediaDuration(backgroundPath);
-            if (rawBgDur > 0 && _bgDurFactor !== 1.0) {
-                duration = rawBgDur * _bgDurFactor;
-                log(`背景原始时长: ${rawBgDur.toFixed(2)}s × ${bgDurScale}% = ${duration.toFixed(2)}s`);
-            } else {
-                duration = rawBgDur;
+            if (isMultiClip) {
+                // 多素材模式：累加素材池总时长
+                log(`正在获取多素材池时长 (${bgClipPool.length} 个)...`);
+                let poolTotalDur = 0;
+                for (const clipPath of bgClipPool) {
+                    if (_isImageFile(clipPath)) {
+                        poolTotalDur += 5.0; // 图片默认 5 秒
+                    } else {
+                        const clipDur = await window.electronAPI.getMediaDuration(clipPath);
+                        if (clipDur > 0) poolTotalDur += clipDur;
+                    }
+                }
+                if (poolTotalDur > 0 && _bgDurFactor !== 1.0) {
+                    duration = poolTotalDur * _bgDurFactor;
+                    log(`多素材池总时长: ${poolTotalDur.toFixed(2)}s × ${bgDurScale}% = ${duration.toFixed(2)}s`);
+                } else {
+                    duration = poolTotalDur;
+                    log(`多素材池总时长: ${duration.toFixed(2)}s`);
+                }
+            } else if (backgroundPath) {
+                log('正在获取背景视频时长...');
+                let rawBgDur = await window.electronAPI.getMediaDuration(backgroundPath);
+                if (rawBgDur > 0 && _bgDurFactor !== 1.0) {
+                    duration = rawBgDur * _bgDurFactor;
+                    log(`背景原始时长: ${rawBgDur.toFixed(2)}s × ${bgDurScale}% = ${duration.toFixed(2)}s`);
+                } else {
+                    duration = rawBgDur;
+                }
             }
         }
         if (!duration || duration <= 0) {
@@ -620,8 +641,17 @@ async function reelsWysiwygExport(params) {
             }
 
             // ── 字幕（与预览完全相同的渲染器）──
-            const activeSeg = segments.find(seg => t >= (seg.start || 0) && t <= (seg.end || 0));
+            let activeSeg = segments.find(seg => t >= (seg.start || 0) && t <= (seg.end || 0));
+            // Scrolling mode: find nearest segment during gaps (same as preview logic)
+            if (!activeSeg && style.scrolling_mode && segments.length > 0) {
+                let best = segments[0];
+                for (const seg of segments) {
+                    if ((seg.start || 0) <= t) best = seg;
+                }
+                activeSeg = best;
+            }
             if (activeSeg) {
+                renderer.setContextSegments(segments);
                 renderer.renderSubtitle(style, activeSeg, t, targetWidth, targetHeight);
             }
 

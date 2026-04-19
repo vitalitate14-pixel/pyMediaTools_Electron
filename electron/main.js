@@ -12,6 +12,24 @@ let appIsReady = false;
 let powerSaveId = null;
 let isQuitting = false;
 
+// ── 自定义缓存路径（必须在 app.ready 之前设置）──
+const _cacheConfigPath = path.join(app.isPackaged ? path.dirname(process.execPath) : __dirname, '.videokit-cache-config.json');
+function _loadCacheConfig() {
+    try {
+        if (fs.existsSync(_cacheConfigPath)) {
+            const cfg = JSON.parse(fs.readFileSync(_cacheConfigPath, 'utf-8'));
+            if (cfg.userDataPath && fs.existsSync(cfg.userDataPath)) {
+                return cfg.userDataPath;
+            }
+        }
+    } catch (e) { /* ignore */ }
+    return null;
+}
+const _customUserData = _loadCacheConfig();
+if (_customUserData) {
+    app.setPath('userData', _customUserData);
+}
+
 // 日志文件路径
 const logDir = (app && app.isPackaged)
     ? path.join(app.getPath('userData'), 'logs')
@@ -565,6 +583,87 @@ app.whenReady().then(async () => {
             return [];
         }
     });
+
+    // ==================== IPC 处理 - 缓存管理 ====================
+    ipcMain.handle('get-cache-info', async () => {
+        const userDataPath = app.getPath('userData');
+        const cacheDirs = ['Cache', 'Code Cache', 'GPUCache', 'DawnGraphiteCache', 'DawnWebGPUCache', 'blob_storage'];
+        let totalSize = 0;
+        const details = [];
+        for (const dir of cacheDirs) {
+            const dirPath = path.join(userDataPath, dir);
+            if (fs.existsSync(dirPath)) {
+                const size = getDirSize(dirPath);
+                totalSize += size;
+                details.push({ name: dir, size });
+            }
+        }
+        return { path: userDataPath, totalSize, details };
+    });
+
+    ipcMain.handle('clear-cache', async () => {
+        const userDataPath = app.getPath('userData');
+        const cacheDirs = ['Cache', 'Code Cache', 'GPUCache', 'DawnGraphiteCache', 'DawnWebGPUCache', 'blob_storage'];
+        let freedSize = 0;
+        for (const dir of cacheDirs) {
+            const dirPath = path.join(userDataPath, dir);
+            if (fs.existsSync(dirPath)) {
+                try {
+                    freedSize += getDirSize(dirPath);
+                    fs.rmSync(dirPath, { recursive: true, force: true });
+                    log(`[Cache] Cleared: ${dirPath}`);
+                } catch (e) {
+                    log(`[Cache] Failed to clear ${dirPath}: ${e.message}`);
+                }
+            }
+        }
+        return { ok: true, freedSize };
+    });
+
+    ipcMain.handle('open-cache-folder', () => {
+        const userDataPath = app.getPath('userData');
+        shell.openPath(userDataPath);
+    });
+
+    ipcMain.handle('set-cache-path', async (event, newPath) => {
+        if (!newPath) {
+            // 清除自定义路径，恢复默认
+            try { fs.unlinkSync(_cacheConfigPath); } catch (_) {}
+            return { ok: true, needRestart: true };
+        }
+        // 确保目录存在
+        if (!fs.existsSync(newPath)) {
+            try { fs.mkdirSync(newPath, { recursive: true }); } catch (e) {
+                return { ok: false, error: '无法创建目录: ' + e.message };
+            }
+        }
+        // 保存配置
+        try {
+            fs.writeFileSync(_cacheConfigPath, JSON.stringify({ userDataPath: newPath }, null, 2), 'utf-8');
+            log(`[Cache] 缓存路径已更改为: ${newPath}，重启后生效`);
+            return { ok: true, needRestart: true };
+        } catch (e) {
+            return { ok: false, error: '保存配置失败: ' + e.message };
+        }
+    });
+
+    function getDirSize(dirPath) {
+        let size = 0;
+        try {
+            const items = fs.readdirSync(dirPath, { withFileTypes: true });
+            for (const item of items) {
+                const fullPath = path.join(dirPath, item.name);
+                try {
+                    if (item.isDirectory()) {
+                        size += getDirSize(fullPath);
+                    } else {
+                        size += fs.statSync(fullPath).size;
+                    }
+                } catch { /* skip */ }
+            }
+        } catch { /* skip */ }
+        return size;
+    }
 
     // 注册 API 路由（替代 Python Flask 后端）
     registerAPIHandlers();

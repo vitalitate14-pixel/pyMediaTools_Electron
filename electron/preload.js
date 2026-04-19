@@ -139,6 +139,12 @@ contextBridge.exposeInMainWorld('electronAPI', {
         ipcRenderer.invoke('open-external-url', url).catch(() => {});
     },
 
+    // 缓存管理
+    getCacheInfo: () => ipcRenderer.invoke('get-cache-info'),
+    clearCache: () => ipcRenderer.invoke('clear-cache'),
+    openCacheFolder: () => ipcRenderer.invoke('open-cache-folder'),
+    setCachePath: (newPath) => ipcRenderer.invoke('set-cache-path', newPath),
+
     // 界面缩放（使用 Electron 原生 webFrame，正确处理布局视口）
     setZoomFactor: (factor) => webFrame.setZoomFactor(factor),
     getZoomFactor: () => webFrame.getZoomFactor(),

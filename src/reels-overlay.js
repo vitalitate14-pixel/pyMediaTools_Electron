@@ -493,6 +493,111 @@ function _ensureGifFrameDecoded(gifData, frameIdx) {
         })();
     }
 }
+// ═══════════════════════════════════════════════════════
+// Auto-Colorize Engine — 自动着色引擎
+// ═══════════════════════════════════════════════════════
+
+/**
+ * 根据关键词规则列表，自动生成 styled_ranges。
+ * @param {string} text - 原始文本
+ * @param {Array} rules - 规则数组 [{ keywords: [...], color, bold, fontsize, ... }]
+ * @returns {Array} styled_ranges
+ */
+function _autoColorize(text, rules) {
+    if (!text || !rules || rules.length === 0) return [];
+    const ranges = [];
+    for (const rule of rules) {
+        if (!rule.keywords || rule.keywords.length === 0) continue;
+        // 构建正则：转义特殊字符，按长度降序排列（优先匹配长词）
+        const sorted = [...rule.keywords].filter(k => k).sort((a, b) => b.length - a.length);
+        if (sorted.length === 0) continue;
+        const escaped = sorted.map(k => k.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'));
+        const pattern = new RegExp(escaped.join('|'), 'g');
+        let match;
+        while ((match = pattern.exec(text)) !== null) {
+            const r = { start: match.index, end: match.index + match[0].length };
+            if (rule.color) r.color = rule.color;
+            if (rule.bold === true) r.bold = true;
+            if (rule.fontsize && rule.fontsize > 0) r.fontsize = rule.fontsize;
+            if (rule.italic === true) r.italic = true;
+            ranges.push(r);
+        }
+    }
+    return ranges;
+}
+
+/**
+ * 合并自动着色范围和手动 styled_ranges。
+ * 手动优先 — 手动范围覆盖的字符位置，自动着色不生效。
+ * @param {Array} autoRanges - 自动生成的范围
+ * @param {Array} manualRanges - 用户手动编辑的富文本范围
+ * @returns {Array} 合并后的 styled_ranges
+ */
+function _mergeAutoAndManual(autoRanges, manualRanges) {
+    if (!autoRanges || autoRanges.length === 0) return manualRanges || [];
+    if (!manualRanges || manualRanges.length === 0) return autoRanges;
+
+    // 收集手动覆盖的区间
+    const manualCovered = (manualRanges || []).map(r => [r.start, r.end]);
+    
+    // 过滤自动范围：仅保留未被手动完全覆盖的部分
+    const filtered = [];
+    for (const ar of autoRanges) {
+        let s = ar.start, e = ar.end;
+        // 检查是否被任何手动范围完全覆盖
+        let fullyManual = false;
+        for (const [ms, me] of manualCovered) {
+            if (ms <= s && me >= e) { fullyManual = true; break; }
+        }
+        if (!fullyManual) {
+            filtered.push(ar);
+        }
+    }
+    return [...filtered, ...manualRanges];
+}
+
+// 缓存：避免每帧重复计算（text 不变时复用）
+const _autoColorCache = new Map();
+const _AUTO_COLOR_CACHE_MAX = 50;
+
+function _getCachedAutoColor(text, rules) {
+    if (!text || !rules || rules.length === 0) return [];
+    // 用 text + rules JSON 生成缓存 key
+    const key = text + '||' + JSON.stringify(rules);
+    if (_autoColorCache.has(key)) return _autoColorCache.get(key);
+    const result = _autoColorize(text, rules);
+    if (_autoColorCache.size > _AUTO_COLOR_CACHE_MAX) _autoColorCache.clear();
+    _autoColorCache.set(key, result);
+    return result;
+}
+
+/**
+ * 获取某个覆层某个区段的最终合并 styled_ranges
+ * @param {object} ov - overlay 对象
+ * @param {string} section - 'title' | 'body' | 'footer' | 'scroll_title' | 'scroll_body'
+ * @param {string} text - 该区段的文本
+ * @returns {Array|null} 合并后的 styled_ranges，null 表示无需富文本渲染
+ */
+function _getAutoColorMergedRanges(ov, section, text) {
+    const rules = ov.auto_color_rules;
+    if (!rules || rules.length === 0) return null;
+    
+    // 检查该 section 是否在 targets 中（默认全部启用）
+    const targets = ov.auto_color_targets;
+    if (targets && targets.length > 0 && !targets.includes(section)) return null;
+    
+    const autoRanges = _getCachedAutoColor(text, rules);
+    if (autoRanges.length === 0) return null;
+    
+    // 获取手动编辑的 styled_ranges
+    let manualKey;
+    if (section === 'scroll_title') manualKey = 'scroll_title_styled_ranges';
+    else if (section === 'scroll_body') manualKey = 'scroll_styled_ranges';
+    else manualKey = `${section}_styled_ranges`;
+    
+    const manual = ov[manualKey] || [];
+    return _mergeAutoAndManual(autoRanges, manual);
+}
 
 /**
  * 渲染单个覆层到 Canvas。
@@ -748,6 +853,17 @@ function _drawVideoOverlay(ctx, ov, x, y, w, h, currentTime) {
  * 渲染文本覆层 (内部)。
  * 完整移植自 FrameRenderer.draw_single_overlay (text 分支)
  */
+function _getMaxFontSizeFromRanges(baseSize, ranges) {
+    if (!ranges || ranges.length === 0) return baseSize;
+    let max = baseSize;
+    for (const r of ranges) {
+        if (r && r.fontsize && r.fontsize > max) {
+            max = r.fontsize;
+        }
+    }
+    return max;
+}
+
 function _drawTextOverlay(ctx, ov, x, y, w, h, currentTime) {
     const content = ov.content || '';
     if (!content) return;
@@ -994,42 +1110,51 @@ function _drawTextCardOverlay(ctx, ov, x, y, w, h, canvasW, canvasH, currentTime
 
     // ── 内部测量函数 ──
     function _measure(tfs, bfs, ffs) {
-        const tf = `${titleItalic} ${titleWeight} ${tfs}px "${titleFamily}", ${titleFallback}`;
-        ctx.font = tf;
+        const tfBase = `${titleItalic} ${titleWeight} ${tfs}px "${titleFamily}", ${titleFallback}`;
+        ctx.font = tfBase;
         ctx.letterSpacing = `${ov.title_letter_spacing || 0}px`;
         const tLines = titleText ? _wrapText(ctx, titleText, tW) : [];
         ctx.letterSpacing = '0px';
-        const tLineH = tfs * 1.3 + parseFloat(ov.title_line_spacing || 0);
-        const tExt = _getSectionExtents('title', tfs);
-        const tFirstFM = tLines.length > 0 ? _fontMetrics(tf, tLines[0], tfs) : null;
-        const tFM = tFirstFM || { ascent: tfs * 0.8, descent: 0 };
-        const tDesc = tLines.length > 0 ? _fontMetrics(tf, tLines[0], tfs, tLines[tLines.length - 1]).descent : 0;
+        const tMergedRanges = _mergeAutoAndManual(ov.title_styled_ranges, _getAutoColorMergedRanges(ov, 'title', titleText));
+        const actualTfs = _getMaxFontSizeFromRanges(tfs, tMergedRanges);
+        const tfActual = `${titleItalic} ${titleWeight} ${actualTfs}px "${titleFamily}", ${titleFallback}`;
+        const tLineH = actualTfs * 1.3 + parseFloat(ov.title_line_spacing || 0);
+        const tExt = _getSectionExtents('title', actualTfs);
+        const tFirstFM = tLines.length > 0 ? _fontMetrics(tfActual, tLines[0], actualTfs) : null;
+        const tFM = tFirstFM || { ascent: actualTfs * 0.8, descent: 0 };
+        const tDesc = tLines.length > 0 ? _fontMetrics(tfActual, tLines[0], actualTfs, tLines[tLines.length - 1]).descent : 0;
         const tTextH = tLines.length > 0 ? (tFM.ascent + tDesc + (tLines.length - 1) * tLineH) : 0;
         const tBlockH = tLines.length > 0 ? (tTextH + tExt.padT + tExt.padB + tExt.extTop + tExt.extBot) : 0;
 
-        const bf = `${bodyItalic} ${bodyWeight} ${bfs}px "${bodyFamily}", ${bodyFallback}`;
-        ctx.font = bf;
+        const bfBase = `${bodyItalic} ${bodyWeight} ${bfs}px "${bodyFamily}", ${bodyFallback}`;
+        ctx.font = bfBase;
         ctx.letterSpacing = `${ov.body_letter_spacing || 0}px`;
         const bLines = bodyText ? _wrapText(ctx, bodyText, bW) : [];
         ctx.letterSpacing = '0px';
-        const bLineH = bfs * 1.3 + parseFloat(ov.body_line_spacing || 0);
-        const bExt = _getSectionExtents('body', bfs);
-        const bFirstFM = bLines.length > 0 ? _fontMetrics(bf, bLines[0], bfs) : null;
-        const bFM = bFirstFM || { ascent: bfs * 0.8, descent: 0 };
-        const bDesc = bLines.length > 0 ? _fontMetrics(bf, bLines[0], bfs, bLines[bLines.length - 1]).descent : 0;
+        const bMergedRanges = _mergeAutoAndManual(ov.body_styled_ranges, _getAutoColorMergedRanges(ov, 'body', bodyText));
+        const actualBfs = _getMaxFontSizeFromRanges(bfs, bMergedRanges);
+        const bfActual = `${bodyItalic} ${bodyWeight} ${actualBfs}px "${bodyFamily}", ${bodyFallback}`;
+        const bLineH = actualBfs * 1.3 + parseFloat(ov.body_line_spacing || 0);
+        const bExt = _getSectionExtents('body', actualBfs);
+        const bFirstFM = bLines.length > 0 ? _fontMetrics(bfActual, bLines[0], actualBfs) : null;
+        const bFM = bFirstFM || { ascent: actualBfs * 0.8, descent: 0 };
+        const bDesc = bLines.length > 0 ? _fontMetrics(bfActual, bLines[0], actualBfs, bLines[bLines.length - 1]).descent : 0;
         const bTextH = bLines.length > 0 ? (bFM.ascent + bDesc + (bLines.length - 1) * bLineH) : 0;
         const bBlockH = bLines.length > 0 ? (bTextH + bExt.padT + bExt.padB + bExt.extTop + bExt.extBot) : 0;
 
-        const ff = `${footerItalic} ${footerWeight} ${ffs}px "${footerFamily}", ${footerFallback}`;
-        ctx.font = ff;
+        const ffBase = `${footerItalic} ${footerWeight} ${ffs}px "${footerFamily}", ${footerFallback}`;
+        ctx.font = ffBase;
         ctx.letterSpacing = `${ov.footer_letter_spacing || 0}px`;
         const fLines = footerText ? _wrapText(ctx, footerText, fW) : [];
         ctx.letterSpacing = '0px';
-        const fLineH = ffs * 1.3 + parseFloat(ov.footer_line_spacing || 0);
-        const fExt = _getSectionExtents('footer', ffs);
-        const fFirstFM = fLines.length > 0 ? _fontMetrics(ff, fLines[0], ffs) : null;
-        const fFM = fFirstFM || { ascent: ffs * 0.8, descent: 0 };
-        const fDesc = fLines.length > 0 ? _fontMetrics(ff, fLines[0], ffs, fLines[fLines.length - 1]).descent : 0;
+        const fMergedRanges = _mergeAutoAndManual(ov.footer_styled_ranges, _getAutoColorMergedRanges(ov, 'footer', footerText));
+        const actualFfs = _getMaxFontSizeFromRanges(ffs, fMergedRanges);
+        const ffActual = `${footerItalic} ${footerWeight} ${actualFfs}px "${footerFamily}", ${footerFallback}`;
+        const fLineH = actualFfs * 1.3 + parseFloat(ov.footer_line_spacing || 0);
+        const fExt = _getSectionExtents('footer', actualFfs);
+        const fFirstFM = fLines.length > 0 ? _fontMetrics(ffActual, fLines[0], actualFfs) : null;
+        const fFM = fFirstFM || { ascent: actualFfs * 0.8, descent: 0 };
+        const fDesc = fLines.length > 0 ? _fontMetrics(ffActual, fLines[0], actualFfs, fLines[fLines.length - 1]).descent : 0;
         const fTextH = fLines.length > 0 ? (fFM.ascent + fDesc + (fLines.length - 1) * fLineH) : 0;
         const fBlockH = fLines.length > 0 ? (fTextH + fExt.padT + fExt.padB + fExt.extTop + fExt.extBot) : 0;
 
@@ -1063,7 +1188,7 @@ function _drawTextCardOverlay(ctx, ov, x, y, w, h, canvasW, canvasH, currentTime
             tLines, tLineH, tTextH, tBlockH, tFM, tExt, tSpace,
             bLines, bLineH, bTextH, bBlockH, bFM, bExt, bSpace,
             fLines, fLineH, fTextH, fBlockH, fFM, fExt, fSpace,
-            total, tf, bf, ff, hasT, hasB, hasF
+            total, tf: tfActual, bf: bfActual, ff: ffActual, hasT, hasB, hasF
         };
     }
 
@@ -1404,9 +1529,11 @@ function _drawTextCardOverlay(ctx, ov, x, y, w, h, canvasW, canvasH, currentTime
                 ctx.lineJoin = 'round';
                 ctx.strokeText(line, lx, ty);
             }
-            // ── 富文本检测 ──
-            if (ov.title_styled_ranges && ov.title_styled_ranges.length > 0 && typeof ReelsRichText !== 'undefined') {
-                _drawRichLine(ctx, line, ov.title_text, ov.title_styled_ranges, lx, ty,
+            // ── 富文本检测 (含自动着色) ──
+            const _titleMerged = _getAutoColorMergedRanges(ov, 'title', ov.title_text);
+            const _titleRanges = _titleMerged || ov.title_styled_ranges;
+            if (_titleRanges && _titleRanges.length > 0 && typeof ReelsRichText !== 'undefined') {
+                _drawRichLine(ctx, line, ov.title_text, _titleRanges, lx, ty,
                     ov.title_color || '#1A1A1A', titleFontSize, titleFamily, titleFallback, titleWeight, ov.title_letter_spacing || 0);
             } else {
                 if (!indep && ov.title_color_from_style) {
@@ -1484,9 +1611,11 @@ function _drawTextCardOverlay(ctx, ov, x, y, w, h, canvasW, canvasH, currentTime
                 ctx.lineJoin = 'round';
                 ctx.strokeText(line, lx, by);
             }
-            // ── 富文本检测 ──
-            if (ov.body_styled_ranges && ov.body_styled_ranges.length > 0 && typeof ReelsRichText !== 'undefined') {
-                _drawRichLine(ctx, line, ov.body_text, ov.body_styled_ranges, lx, by,
+            // ── 富文本检测 (含自动着色) ──
+            const _bodyMerged = _getAutoColorMergedRanges(ov, 'body', ov.body_text);
+            const _bodyRanges = _bodyMerged || ov.body_styled_ranges;
+            if (_bodyRanges && _bodyRanges.length > 0 && typeof ReelsRichText !== 'undefined') {
+                _drawRichLine(ctx, line, ov.body_text, _bodyRanges, lx, by,
                     ov.body_color || '#333333', bodyFontSize, bodyFamily, bodyFallback, bodyWeight, ov.body_letter_spacing || 0);
             } else {
                 ctx.fillStyle = ov.body_color || '#333333';
@@ -1560,9 +1689,11 @@ function _drawTextCardOverlay(ctx, ov, x, y, w, h, canvasW, canvasH, currentTime
                 ctx.lineJoin = 'round';
                 ctx.strokeText(line, lx, fy);
             }
-            // ── 富文本检测 ──
-            if (ov.footer_styled_ranges && ov.footer_styled_ranges.length > 0 && typeof ReelsRichText !== 'undefined') {
-                _drawRichLine(ctx, line, ov.footer_text, ov.footer_styled_ranges, lx, fy,
+            // ── 富文本检测 (含自动着色) ──
+            const _footerMerged = _getAutoColorMergedRanges(ov, 'footer', ov.footer_text);
+            const _footerRanges = _footerMerged || ov.footer_styled_ranges;
+            if (_footerRanges && _footerRanges.length > 0 && typeof ReelsRichText !== 'undefined') {
+                _drawRichLine(ctx, line, ov.footer_text, _footerRanges, lx, fy,
                     ov.footer_color || '#666666', footerFontSize, footerFamily, footerFallback, footerWeight, ov.footer_letter_spacing || 0);
             } else {
                 ctx.fillStyle = ov.footer_color || '#666666';
@@ -1668,7 +1799,8 @@ function _drawTextCardOverlay(ctx, ov, x, y, w, h, canvasW, canvasH, currentTime
  * x/y/w/h = 裁切区域; 文本从 scroll_from → scroll_to 移动。
  */
 function _drawScrollOverlay(ctx, ov, clipX, clipY, clipW, clipH, currentTime, canvasW, canvasH) {
-    const content = ov.content || '';
+    let content = ov.content || '';
+    if (ov.scroll_uppercase !== false) content = content.toUpperCase();
     if (!content) return;
 
     const start = parseFloat(ov.start || 0);
@@ -1717,13 +1849,16 @@ function _drawScrollOverlay(ctx, ov, clipX, clipY, clipW, clipH, currentTime, ca
     // ── 计算标题占用高度 ──
     let titleOccupiedH = 0;
     const scrollTitleText = (ov.scroll_title || '').trim();
+    let actualTitleFontSize = 56;
     if (scrollTitleText) {
         const tSize = parseFloat(ov.scroll_title_fontsize ?? 56);
+        const tMergedRanges = _mergeAutoAndManual(ov.scroll_title_styled_ranges, _getAutoColorMergedRanges(ov, 'scroll_title', scrollTitleText));
+        actualTitleFontSize = _getMaxFontSizeFromRanges(tSize, tMergedRanges);
         const tFamily = ov.scroll_title_font_family || fontFamily;
         const tWeight = _resolveOverlayFontWeight(ov.scroll_title_font_weight, ov.scroll_title_bold ? 700 : 400);
         const tFallback = _resolveOverlayFallback(tFamily);
         const tFont = `${italicStr} ${tWeight} ${tSize}px "${tFamily}", ${tFallback}`;
-        const tLineH = tSize * 1.3 + lineSpacing;
+        const tLineH = actualTitleFontSize * 1.3 + lineSpacing;
         const tGap = parseFloat(ov.scroll_title_gap ?? 20);
         ctx.font = tFont;
         const titleLines = _wrapText(ctx, scrollTitleText, textW);
@@ -1737,11 +1872,13 @@ function _drawScrollOverlay(ctx, ov, clipX, clipY, clipW, clipH, currentTime, ca
     const bodyVisibleH = visibleH - titleOccupiedH;  // 可用于正文的高度
     const minFontSize = parseFloat(ov.scroll_min_fontsize ?? 16);
 
+    const bMergedRanges = _mergeAutoAndManual(ov.scroll_styled_ranges, _getAutoColorMergedRanges(ov, 'scroll', content));
     let fontStr, lineHeight, lines;
     if (ov.scroll_auto_fit && bodyVisibleH > 0) {
         // 循环缩小字号直到正文高度 <= 可用高度
         for (let trySize = fontSize; trySize >= minFontSize; trySize -= 2) {
-            lineHeight = trySize * 1.3 + lineSpacing;
+            const actualTrySize = _getMaxFontSizeFromRanges(trySize, bMergedRanges);
+            lineHeight = actualTrySize * 1.3 + lineSpacing;
             fontStr = `${italicStr} ${fontWeight} ${trySize}px "${fontFamily}", ${fallback}`;
             ctx.font = fontStr;
             lines = _wrapText(ctx, content, textW);
@@ -1753,7 +1890,8 @@ function _drawScrollOverlay(ctx, ov, clipX, clipY, clipW, clipH, currentTime, ca
             fontSize = trySize; // 即使到了 minFontSize 也要用
         }
     } else {
-        lineHeight = fontSize * 1.3 + lineSpacing;
+        const actualBfs = _getMaxFontSizeFromRanges(fontSize, bMergedRanges);
+        lineHeight = actualBfs * 1.3 + lineSpacing;
         fontStr = `${italicStr} ${fontWeight} ${fontSize}px "${fontFamily}", ${fallback}`;
         ctx.font = fontStr;
         lines = _wrapText(ctx, content, textW);
@@ -1828,72 +1966,94 @@ function _drawScrollOverlay(ctx, ov, clipX, clipY, clipW, clipH, currentTime, ca
     const featherBottom = parseFloat(ov.feather_bottom ?? 0);
 
     // ── 固定标题模式 ──
-    const titleText = (ov.scroll_title || '').trim();
-    const titleFixed = ov.scroll_title_fixed !== false && titleText;
+        let titleText = (ov.scroll_title || '').trim();
+        if (ov.scroll_title_uppercase !== false) titleText = titleText.toUpperCase();
+        const titleFixed = ov.scroll_title_fixed !== false && titleText;
 
-    if (titleFixed) {
-        // 计算标题尺寸
-        const tSize = parseFloat(ov.scroll_title_fontsize ?? 56);
-        const tFamily = ov.scroll_title_font_family || fontFamily;
-        const tWeight = _resolveOverlayFontWeight(ov.scroll_title_font_weight, ov.scroll_title_bold ? 700 : 400);
-        const tFallback = _resolveOverlayFallback(tFamily);
-        const tFont = `${italicStr} ${tWeight} ${tSize}px "${tFamily}", ${tFallback}`;
-        const tColor = ov.scroll_title_color || ov.color || '#FFFFFF';
-        const tAlign = ov.scroll_title_align || align;
-        const tLineH = tSize * 1.3 + lineSpacing;
-        const tGap = parseFloat(ov.scroll_title_gap ?? 20);
+        if (titleFixed) {
+            // 计算标题尺寸
+            const tSize = parseFloat(ov.scroll_title_fontsize ?? 56);
+            const tFamily = ov.scroll_title_font_family || fontFamily;
+            const tWeight = _resolveOverlayFontWeight(ov.scroll_title_font_weight, ov.scroll_title_bold ? 700 : 400);
+            const tFallback = _resolveOverlayFallback(tFamily);
+            const tFont = `${italicStr} ${tWeight} ${tSize}px "${tFamily}", ${tFallback}`;
+            const tColor = ov.scroll_title_color || ov.color || '#FFFFFF';
+            const tAlign = ov.scroll_title_align || align;
+            const tLineH = tSize * 1.3 + lineSpacing;
+            const tGap = parseFloat(ov.scroll_title_gap ?? 20);
+            const tLetterSpacing = parseFloat(ov.scroll_title_letter_spacing || 0);
 
-        ctx.save();
-        ctx.font = tFont;
-        const titleLines = _wrapText(ctx, titleText, textW);
-        const titleBlockH = titleLines.length * tLineH;
-
-        // ── 1. 绘制固定标题 (在覆层顶部，不受裁切) ──
-        const titleDrawY = clipY;
-        const titleDrawX = parseFloat(ov.scroll_from_x ?? 90);
-
-        // 阴影
-        if (ov.shadow_enabled) {
             ctx.save();
-            ctx.shadowColor = _withAlpha(ov.shadow_color || '#000000', (ov.shadow_opacity || 120) / 255);
-            ctx.shadowBlur = parseFloat(ov.shadow_blur || 4);
-            ctx.shadowOffsetX = parseFloat(ov.shadow_offset_x || 2);
-            ctx.shadowOffsetY = parseFloat(ov.shadow_offset_y || 2);
+            ctx.font = tFont;
+            if (tLetterSpacing !== 0 && typeof ctx.letterSpacing !== 'undefined') {
+                ctx.letterSpacing = tLetterSpacing + 'px';
+            }
+            const titleLines = _wrapText(ctx, titleText, textW);
+            const titleBlockH = titleLines.length * tLineH;
+
+            // ── 1. 绘制固定标题 (在覆层顶部，不受裁切) ──
+            const titleDrawY = clipY;
+            const titleDrawX = parseFloat(ov.scroll_from_x ?? 90);
+
+            // 阴影
+            const tShadowEnabled = ov.scroll_title_shadow_enabled !== undefined ? ov.scroll_title_shadow_enabled : ov.shadow_enabled;
+            if (tShadowEnabled) {
+                ctx.save();
+                ctx.shadowColor = _withAlpha(ov.scroll_title_shadow_color || ov.shadow_color || '#000000', (ov.shadow_opacity || 120) / 255);
+                ctx.shadowBlur = parseFloat(ov.scroll_title_shadow_blur ?? ov.shadow_blur ?? 4);
+                ctx.shadowOffsetX = parseFloat(ov.scroll_title_shadow_x ?? ov.shadow_offset_x ?? 2);
+                ctx.shadowOffsetY = parseFloat(ov.scroll_title_shadow_y ?? ov.shadow_offset_y ?? 2);
+                ctx.fillStyle = tColor;
+                let ty = titleDrawY + tSize;
+                for (const line of titleLines) {
+                    if (typeof _fillTextWithLetterSpacing !== 'undefined' && tLetterSpacing !== 0 && typeof ctx.letterSpacing === 'undefined') {
+                        _fillTextWithLetterSpacing(ctx, line, _alignX(ctx, line, titleDrawX, textW, tAlign), ty, tLetterSpacing);
+                    } else {
+                        ctx.fillText(line, _alignX(ctx, line, titleDrawX, textW, tAlign), ty);
+                    }
+                    ty += tLineH;
+                }
+                ctx.restore();
+            }
+            // 描边
+            const tStrokeWidth = parseFloat(ov.scroll_title_stroke_width ?? ov.stroke_width ?? 0);
+            const tUseStroke = tStrokeWidth > 0;
+            if (tUseStroke) {
+                ctx.save();
+                ctx.strokeStyle = ov.scroll_title_stroke_color || ov.stroke_color || '#000000';
+                ctx.lineWidth = tStrokeWidth * 2;
+                ctx.lineJoin = 'round'; ctx.miterLimit = 2;
+                let ty = titleDrawY + tSize;
+                for (const line of titleLines) {
+                    if (typeof _strokeTextWithLetterSpacing !== 'undefined' && tLetterSpacing !== 0 && typeof ctx.letterSpacing === 'undefined') {
+                        _strokeTextWithLetterSpacing(ctx, line, _alignX(ctx, line, titleDrawX, textW, tAlign), ty, tLetterSpacing);
+                    } else {
+                        ctx.strokeText(line, _alignX(ctx, line, titleDrawX, textW, tAlign), ty);
+                    }
+                    ty += tLineH;
+                }
+                ctx.restore();
+            }
+            // 填充
+            if (typeof _drawRichLine !== 'undefined') _drawRichLine._searchFrom = 0;
             ctx.fillStyle = tColor;
             let ty = titleDrawY + tSize;
             for (const line of titleLines) {
-                ctx.fillText(line, _alignX(ctx, line, titleDrawX, textW, tAlign), ty);
+                const lx = _alignX(ctx, line, titleDrawX, textW, tAlign);
+                const _scrollTitleMerged1 = _getAutoColorMergedRanges(ov, 'scroll_title', titleText);
+                const _scrollTitleRanges1 = _scrollTitleMerged1 || ov.scroll_title_styled_ranges;
+                if (_scrollTitleRanges1 && _scrollTitleRanges1.length > 0 && typeof ReelsRichText !== 'undefined') {
+                    _drawRichLine(ctx, line, titleText, _scrollTitleRanges1, lx, ty, tColor, tSize, tFamily, tFallback, tWeight, tLetterSpacing);
+                } else {
+                    if (typeof _fillTextWithLetterSpacing !== 'undefined' && tLetterSpacing !== 0 && typeof ctx.letterSpacing === 'undefined') {
+                        _fillTextWithLetterSpacing(ctx, line, lx, ty, tLetterSpacing);
+                    } else {
+                        ctx.fillText(line, lx, ty);
+                    }
+                }
                 ty += tLineH;
             }
             ctx.restore();
-        }
-        // 描边
-        if (ov.use_stroke && (ov.stroke_width || 0) > 0) {
-            ctx.save();
-            ctx.strokeStyle = ov.stroke_color || '#000000';
-            ctx.lineWidth = parseFloat(ov.stroke_width || 2) * 2;
-            ctx.lineJoin = 'round'; ctx.miterLimit = 2;
-            let ty = titleDrawY + tSize;
-            for (const line of titleLines) {
-                ctx.strokeText(line, _alignX(ctx, line, titleDrawX, textW, tAlign), ty);
-                ty += tLineH;
-            }
-            ctx.restore();
-        }
-        // 填充
-        if (typeof _drawRichLine !== 'undefined') _drawRichLine._searchFrom = 0;
-        ctx.fillStyle = tColor;
-        let ty = titleDrawY + tSize;
-        for (const line of titleLines) {
-            const lx = _alignX(ctx, line, titleDrawX, textW, tAlign);
-            if (ov.scroll_title_styled_ranges && ov.scroll_title_styled_ranges.length > 0 && typeof ReelsRichText !== 'undefined') {
-                _drawRichLine(ctx, line, titleText, ov.scroll_title_styled_ranges, lx, ty, tColor, tSize, tFamily, tFallback, tWeight, 0);
-            } else {
-                ctx.fillText(line, lx, ty);
-            }
-            ty += tLineH;
-        }
-        ctx.restore();
 
         // ── 2. 正文在标题下方的剩余空间内滚动 ──
         const bodyClipY = clipY + titleBlockH + tGap;
@@ -2016,7 +2176,10 @@ function _drawScrollTextBlock(ctx, ov, lines, textX, textY, textW, lineHeight, f
         const tFont = `${tItalic} ${tWeight} ${tSize}px "${tFamily}", ${tFallback}`;
         const tColor = ov.scroll_title_color || ov.color || '#FFFFFF';
         const tAlign = ov.scroll_title_align || align;
-        const tLineH = tSize * 1.3 + parseFloat(ov.line_spacing ?? 6);
+        
+        const tMergedRanges = _mergeAutoAndManual(ov.scroll_title_styled_ranges, _getAutoColorMergedRanges(ov, 'scroll_title', titleText));
+        const actualTitleFontSize = _getMaxFontSizeFromRanges(tSize, tMergedRanges);
+        const tLineH = actualTitleFontSize * 1.3 + parseFloat(ov.line_spacing ?? 6);
         const tGap = parseFloat(ov.scroll_title_gap ?? 20);
 
         ctx.save();
@@ -2057,8 +2220,10 @@ function _drawScrollTextBlock(ctx, ov, lines, textX, textY, textW, lineHeight, f
         let ty = drawY + tSize;
         for (const line of titleLines) {
             const lx = _alignX(ctx, line, textX, textW, tAlign);
-            if (ov.scroll_title_styled_ranges && ov.scroll_title_styled_ranges.length > 0 && typeof ReelsRichText !== 'undefined') {
-                _drawRichLine(ctx, line, titleText, ov.scroll_title_styled_ranges, lx, ty, tColor, tSize, tFamily, tFallback, tWeight, 0);
+            const _scrollTitleMerged2 = _getAutoColorMergedRanges(ov, 'scroll_title', titleText);
+            const _scrollTitleRanges2 = _scrollTitleMerged2 || ov.scroll_title_styled_ranges;
+            if (_scrollTitleRanges2 && _scrollTitleRanges2.length > 0 && typeof ReelsRichText !== 'undefined') {
+                _drawRichLine(ctx, line, titleText, _scrollTitleRanges2, lx, ty, tColor, tSize, tFamily, tFallback, tWeight, 0);
             } else {
                 ctx.fillText(line, lx, ty);
             }
@@ -2070,18 +2235,27 @@ function _drawScrollTextBlock(ctx, ov, lines, textX, textY, textW, lineHeight, f
     }
 
     // ── 正文 ──
+    const bLetterSpacing = parseFloat(ov.scroll_letter_spacing || 0);
+    if (bLetterSpacing !== 0 && typeof ctx.letterSpacing !== 'undefined') {
+        ctx.letterSpacing = bLetterSpacing + 'px';
+    }
+
     // 阴影
     if (ov.shadow_enabled) {
         ctx.save();
         ctx.shadowColor = _withAlpha(ov.shadow_color || '#000000', (ov.shadow_opacity || 120) / 255);
         ctx.shadowBlur = parseFloat(ov.shadow_blur || 4);
-        ctx.shadowOffsetX = parseFloat(ov.shadow_offset_x || 2);
-        ctx.shadowOffsetY = parseFloat(ov.shadow_offset_y || 2);
+        ctx.shadowOffsetX = parseFloat(ov.scroll_shadow_x ?? ov.shadow_offset_x ?? 2);
+        ctx.shadowOffsetY = parseFloat(ov.scroll_shadow_y ?? ov.shadow_offset_y ?? 2);
         ctx.fillStyle = ov.color || '#FFFFFF';
         let sy = drawY + fontSize;
         for (const line of lines) {
             const lx = _alignX(ctx, line, textX, textW, align);
-            ctx.fillText(line, lx, sy);
+            if (typeof _fillTextWithLetterSpacing !== 'undefined' && bLetterSpacing !== 0 && typeof ctx.letterSpacing === 'undefined') {
+                _fillTextWithLetterSpacing(ctx, line, lx, sy, bLetterSpacing);
+            } else {
+                ctx.fillText(line, lx, sy);
+            }
             sy += lineHeight;
         }
         ctx.restore();
@@ -2096,7 +2270,11 @@ function _drawScrollTextBlock(ctx, ov, lines, textX, textY, textW, lineHeight, f
         let sy = drawY + fontSize;
         for (const line of lines) {
             const lx = _alignX(ctx, line, textX, textW, align);
-            ctx.strokeText(line, lx, sy);
+            if (typeof _strokeTextWithLetterSpacing !== 'undefined' && bLetterSpacing !== 0 && typeof ctx.letterSpacing === 'undefined') {
+                _strokeTextWithLetterSpacing(ctx, line, lx, sy, bLetterSpacing);
+            } else {
+                ctx.strokeText(line, lx, sy);
+            }
             sy += lineHeight;
         }
         ctx.restore();
@@ -2108,12 +2286,22 @@ function _drawScrollTextBlock(ctx, ov, lines, textX, textY, textW, lineHeight, f
     const bodyFamily = ov.font_family || 'Arial';
     const bodyFallback = _resolveOverlayFallback(bodyFamily);
     const bodyWeight = _resolveOverlayFontWeight(ov.font_weight, ov.bold ? 700 : 400);
+    
+    let rawContent = ov.content || '';
+    if (ov.scroll_uppercase !== false) rawContent = rawContent.toUpperCase();
+
     for (const line of lines) {
         const lx = _alignX(ctx, line, textX, textW, align);
-        if (ov.scroll_styled_ranges && ov.scroll_styled_ranges.length > 0 && typeof ReelsRichText !== 'undefined') {
-            _drawRichLine(ctx, line, ov.content || '', ov.scroll_styled_ranges, lx, yc, ov.color || '#FFFFFF', fontSize, bodyFamily, bodyFallback, bodyWeight, 0);
+        const _scrollBodyMerged = _getAutoColorMergedRanges(ov, 'scroll_body', rawContent);
+        const _scrollBodyRanges = _scrollBodyMerged || ov.scroll_styled_ranges;
+        if (_scrollBodyRanges && _scrollBodyRanges.length > 0 && typeof ReelsRichText !== 'undefined') {
+            _drawRichLine(ctx, line, rawContent, _scrollBodyRanges, lx, yc, ov.color || '#FFFFFF', fontSize, bodyFamily, bodyFallback, bodyWeight, bLetterSpacing);
         } else {
-            ctx.fillText(line, lx, yc);
+            if (typeof _fillTextWithLetterSpacing !== 'undefined' && bLetterSpacing !== 0 && typeof ctx.letterSpacing === 'undefined') {
+                _fillTextWithLetterSpacing(ctx, line, lx, yc, bLetterSpacing);
+            } else {
+                ctx.fillText(line, lx, yc);
+            }
         }
         yc += lineHeight;
     }

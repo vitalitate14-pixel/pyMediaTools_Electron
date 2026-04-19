@@ -579,6 +579,9 @@ function _initReelsColumnResize() {
 }
 
 async function _getSystemDownloadsPath() {
+    // 优先使用设置页面自定义的默认输出目录
+    const custom = localStorage.getItem('vk_default_output_dir');
+    if (custom) return custom;
     try {
         if (window.electronAPI && typeof window.electronAPI.getDownloadsPath === 'function') {
             const p = await window.electronAPI.getDownloadsPath();
@@ -1374,7 +1377,7 @@ function _readStyleFromUI() {
     const wwLabel = get('reels-wrap-width-label');
     if (wwLabel) wwLabel.textContent = val('reels-wrap-width') + '%';
 
-    return {
+    const baseStyle = {
         // Font
         font_family: val('reels-font-family') || 'Arial',
         font_weight: num('reels-font-weight', chk('reels-bold') ? 700 : 400),
@@ -1409,6 +1412,7 @@ function _readStyleFromUI() {
 
         // Box
         use_box: chk('reels-use-box'),
+        box_adaptive_width: chk('reels-box-adaptive-width'),
         color_bg: val('reels-box-color') || '#000000',
         opacity_bg: num('reels-box-opacity', 150),
         box_radius: num('reels-box-radius', 8),
@@ -1437,24 +1441,19 @@ function _readStyleFromUI() {
         high_padding: num('reels-high-padding', 4),
         high_offset_y: 0,
 
-        // Underline
-        use_underline: chk('reels-use-underline'),
-        color_underline: val('reels-underline-color') || '#FFD700',
+        karaoke_highlight: chk('reels-karaoke'),
 
-        // Position / layout
+        // Position & Layout
         pos_x: num('reels-pos-x', 50) / 100,
-        pos_y: num('reels-pos-y', 50) / 100,
+        pos_y: num('reels-pos-y', 85) / 100,
         wrap_width_percent: num('reels-wrap-width', 90),
-        line_spacing: num('reels-line-spacing', 4),
+        wrap_lines: 2,
+        wrap_left: 0,
+        wrap_right: 0,
+        line_spacing: num('reels-line-spacing', 1.2),
         rotation: num('reels-rotation', 0),
-        opacity_text_global: 255,
 
-        // Global mask
-        global_mask_enabled: chk('reels-global-mask'),
-        global_mask_color: val('reels-global-mask-color') || '#000000',
-        global_mask_opacity: num('reels-global-mask-opacity', 128) / 255,
-
-        // Advanced textbox
+        // Advanced Textbox
         advanced_textbox_enabled: chk('reels-adv-textbox'),
         advanced_textbox_align: val('reels-adv-textbox-align') || 'center',
         advanced_textbox_valign: val('reels-adv-textbox-valign') || 'center',
@@ -1462,16 +1461,24 @@ function _readStyleFromUI() {
         advanced_textbox_y: num('reels-adv-y', 1400),
         advanced_textbox_w: num('reels-adv-w', 680),
         advanced_textbox_h: num('reels-adv-h', 280),
+        adv_text_align: val('reels-adv-textbox-align') || 'center',
+        
+        // Background Mask
+        global_mask_enabled: chk('reels-global-mask'),
+        global_mask_color: val('reels-global-mask-color') || '#000000',
+        global_mask_opacity: num('reels-global-mask-opacity', 128) / 255,
+
+        // Background box
         adv_bg_enabled: chk('reels-adv-bg'),
         adv_bg_color: val('reels-adv-bg-color') || '#000000',
         adv_bg_opacity: num('reels-adv-bg-opacity', 150),
         adv_bg_radius: num('reels-adv-bg-radius', 8),
 
         // Animation
-        anim_in_type: val('reels-anim-in') || 'fade',
+        anim_in_type: val('reels-anim-in') || 'none',
         anim_in_duration: num('reels-anim-in-dur', 0.3),
         anim_in_easing: 'ease_out',
-        anim_out_type: val('reels-anim-out') || 'fade',
+        anim_out_type: val('reels-anim-out') || 'none',
         anim_out_duration: num('reels-anim-out-dur', 0.25),
         anim_out_easing: 'ease_in_out',
 
@@ -1513,7 +1520,181 @@ function _readStyleFromUI() {
         metro_unread_color: '#808080',
         metro_unread_stroke_color: '#404040',
         metro_unread_opacity: 100,
+
+        // Scrolling lyrics mode
+        scrolling_mode: chk('reels-scrolling-mode'),
+        scrolling_visible_lines: num('reels-scrolling-lines', 3),
+        scrolling_opacity_context: num('reels-scrolling-opacity', 0.3),
     };
+
+    // === Merge with existing hidden state (auto_color_rules etc.) ===
+    const existingStyle = _reelsState.style || {};
+    const merged = Object.assign({}, existingStyle, baseStyle);
+    _reelsState.style = merged;
+    return merged;
+}
+
+// ═══════════════════════════════════════════════════════
+// Subtitle Auto-Color UI
+// ═══════════════════════════════════════════════════════
+
+function reelsAddAutoColorRule(type) {
+    if (!_reelsState.style) _reelsState.style = _readStyleFromUI();
+    if (!_reelsState.style.auto_color_rules) _reelsState.style.auto_color_rules = [];
+    
+    let defaultKw = [];
+    if (type === 'number') defaultKw = ['\\d+(\\.\\d+)?'];
+    else if (type === 'english') defaultKw = ['[a-zA-Z]+'];
+    
+    _reelsState.style.auto_color_rules.push({
+        type: type,
+        keywords: defaultKw,
+        color: '#FFD700',
+        bold: false,
+        italic: false,
+        fontsize: 0
+    });
+    
+    _persistSubtitleStyleByScope(_reelsState.style);
+    _renderSubtitleAutoColorRules();
+    reelsUpdatePreview();
+}
+
+function _renderSubtitleAutoColorRules() {
+    const container = document.getElementById('reels-autocolor-rules');
+    if (!container) return;
+    container.innerHTML = '';
+    
+    const style = _reelsState.style;
+    if (!style || !style.auto_color_rules || style.auto_color_rules.length === 0) {
+        container.innerHTML = '<div style="color:var(--text-secondary,#888);font-size:12px;text-align:center;padding:4px;">(暂无规则)</div>';
+        return;
+    }
+
+    style.auto_color_rules.forEach((rule, idx) => {
+        const ruleDiv = document.createElement('div');
+        ruleDiv.style.cssText = 'border:1px solid var(--border-color,#444);border-radius:4px;padding:4px 6px;background:var(--bg-tertiary,#1e1e2d);display:flex;flex-direction:column;gap:4px;';
+        
+        // Header
+        const header = document.createElement('div');
+        header.style.cssText = 'display:flex;justify-content:space-between;align-items:center;font-size:11px;';
+        
+        const select = document.createElement('select');
+        select.className = 'input input-small';
+        select.style.cssText = 'padding:2px 4px;font-size:11px;height:auto;flex:1;';
+        const types = { 'keyword': '🏷️ 关键词', 'number': '🔢 数字', 'english': '🔤 英文', 'punctuation': '❗ 标点', 'quoted': '「」 引号', 'emoji': '😀 Emoji' };
+        for (const [v, n] of Object.entries(types)) {
+            const opt = document.createElement('option');
+            opt.value = v; opt.textContent = n;
+            select.appendChild(opt);
+        }
+        select.value = rule.type;
+        select.addEventListener('change', () => {
+            rule.type = select.value;
+            if (rule.type === 'number') rule.keywords = ['\\d+(\\.\\d+)?'];
+            else if (rule.type === 'english') rule.keywords = ['[a-zA-Z]+'];
+            else if (rule.type === 'punctuation') rule.keywords = ['[!?！？❤️⭐✨🔥💪…]+'];
+            else if (rule.type === 'quoted') rule.keywords = ['[「」"\'\'][^「」"\'\']*[「」"\'\']'];
+            else if (rule.type === 'emoji') rule.keywords = ['\\p{Emoji_Presentation}|\\p{Extended_Pictographic}'];
+            else rule.keywords = [];
+            _persistSubtitleStyleByScope(style);
+            _renderSubtitleAutoColorRules();
+            reelsUpdatePreview();
+        });
+        header.appendChild(select);
+        
+        const delBtn = document.createElement('button');
+        delBtn.innerHTML = '✕';
+        delBtn.style.cssText = 'background:none;border:none;color:var(--danger,#ff4444);cursor:pointer;margin-left:8px;font-size:12px;';
+        delBtn.addEventListener('click', () => {
+            style.auto_color_rules.splice(idx, 1);
+            _persistSubtitleStyleByScope(style);
+            _renderSubtitleAutoColorRules();
+            reelsUpdatePreview();
+        });
+        header.appendChild(delBtn);
+        ruleDiv.appendChild(header);
+
+        // Keywords Input
+        if (rule.type === 'keyword') {
+            const kwInput = document.createElement('textarea');
+            kwInput.className = 'input';
+            kwInput.rows = 2;
+            kwInput.style.cssText = 'padding:4px;font-size:11px;min-height:40px;max-height:150px;resize:vertical;width:100%;box-sizing:border-box;';
+            kwInput.placeholder = '输入或粘贴词语块\n换行或逗号分隔';
+            kwInput.value = (rule.keywords || []).join('\n');
+            kwInput.addEventListener('input', () => {
+                rule.keywords = kwInput.value.split(/[\n,，]+/).map(s => s.trim()).filter(s => s);
+                _persistSubtitleStyleByScope(style);
+                reelsUpdatePreview();
+            });
+            ruleDiv.appendChild(kwInput);
+        }
+
+        // Style Row
+        const styleRow = document.createElement('div');
+        styleRow.style.cssText = 'display:flex;align-items:center;gap:6px;margin-top:2px;';
+        
+        // Color
+        const cPicker = document.createElement('input');
+        cPicker.type = 'color';
+        cPicker.value = rule.color || '#FFD700';
+        cPicker.style.cssText = 'width:24px;height:24px;padding:0;border:none;border-radius:4px;cursor:pointer;';
+        cPicker.addEventListener('input', () => {
+            rule.color = cPicker.value;
+            _persistSubtitleStyleByScope(style);
+            reelsUpdatePreview();
+        });
+        styleRow.appendChild(cPicker);
+
+        // Bold
+        const boldLbl = document.createElement('label');
+        boldLbl.style.cssText = 'font-size:11px;display:flex;align-items:center;gap:2px;cursor:pointer;';
+        const boldChk = document.createElement('input');
+        boldChk.type = 'checkbox';
+        boldChk.checked = rule.bold;
+        boldChk.addEventListener('change', () => {
+            rule.bold = boldChk.checked;
+            _persistSubtitleStyleByScope(style);
+            reelsUpdatePreview();
+        });
+        boldLbl.appendChild(boldChk);
+        boldLbl.appendChild(document.createTextNode('B'));
+        styleRow.appendChild(boldLbl);
+
+        // Italic
+        const itLbl = document.createElement('label');
+        itLbl.style.cssText = 'font-size:11px;display:flex;align-items:center;gap:2px;cursor:pointer;';
+        const itChk = document.createElement('input');
+        itChk.type = 'checkbox';
+        itChk.checked = rule.italic;
+        itChk.addEventListener('change', () => {
+            rule.italic = itChk.checked;
+            _persistSubtitleStyleByScope(style);
+            reelsUpdatePreview();
+        });
+        itLbl.appendChild(itChk);
+        itLbl.appendChild(document.createTextNode('I'));
+        styleRow.appendChild(itLbl);
+
+        // Font Size
+        const fsInput = document.createElement('input');
+        fsInput.type = 'number';
+        fsInput.className = 'input input-small';
+        fsInput.style.cssText = 'width:40px;';
+        fsInput.placeholder = '字号';
+        if (rule.fontsize) fsInput.value = rule.fontsize;
+        fsInput.addEventListener('input', () => {
+            const v = parseInt(fsInput.value);
+            rule.fontsize = isNaN(v) ? 0 : v;
+            _persistSubtitleStyleByScope(style);
+            reelsUpdatePreview();
+        });
+        styleRow.appendChild(fsInput);
+
+        ruleDiv.appendChild(styleRow);
+        container.appendChild(ruleDiv);
+    });
 }
 
 function _writeStyleToUI(style) {
@@ -1551,6 +1732,7 @@ function _writeStyleToUI(style) {
     set('reels-shadow-offset-x', style.shadow_offset_x ?? 0);
     set('reels-shadow-offset-y', style.shadow_offset_y ?? 2);
     setChk('reels-use-box', style.use_box);
+    setChk('reels-box-adaptive-width', style.box_adaptive_width);
     set('reels-box-color', style.color_bg || '#000000');
     set('reels-box-opacity', style.opacity_bg || 150);
     set('reels-box-radius', style.box_radius || 8);
@@ -1608,6 +1790,19 @@ function _writeStyleToUI(style) {
     set('reels-glow-color', style.holy_glow_color || '#FFFFAA');
     set('reels-glow-radius', style.holy_glow_radius || 6);
     set('reels-blur-max', style.blur_sharp_max || 20);
+
+    // Scrolling lyrics mode
+    setChk('reels-scrolling-mode', style.scrolling_mode);
+    set('reels-scrolling-lines', style.scrolling_visible_lines || 3);
+    set('reels-scrolling-opacity', style.scrolling_opacity_context || 0.3);
+    // Toggle visibility of scrolling sub-options
+    const scrollOpts = document.getElementById('reels-scrolling-options');
+    if (scrollOpts) scrollOpts.style.display = style.scrolling_mode ? '' : 'none';
+
+    // Sync _reelsState.style so hidden props survive
+    _reelsState.style = Object.assign({}, _reelsState.style || {}, style);
+
+    _renderSubtitleAutoColorRules();
 }
 
 // ═══════════════════════════════════════════════════════
@@ -1906,6 +2101,14 @@ function reelsUpdatePreview() {
         const s = segs.find(s => audioCycleTime >= s.start && audioCycleTime <= s.end);
         if (s) {
             activeSegment = s;
+        } else if (style.scrolling_mode && segs.length > 0) {
+            // Scrolling mode: find nearest segment so lines stay visible between gaps
+            let best = segs[0];
+            for (let i = 1; i < segs.length; i++) {
+                if (segs[i].start <= audioCycleTime) best = segs[i];
+                else break;
+            }
+            activeSegment = best;
         } else {
             // Not speaking, don't show test text
             activeSegment = null;
@@ -1922,6 +2125,11 @@ function reelsUpdatePreview() {
     }
 
     if (activeSegment && showSubtitle) {
+        if (typeof _selectedTask !== 'undefined' && _selectedTask && _selectedTask.segments) {
+            renderer.setContextSegments(_selectedTask.segments);
+        } else {
+            renderer.setContextSegments([activeSegment]);
+        }
         renderer.renderSubtitle(style, activeSegment, audioCycleTime, w, h);
     }
 
@@ -2150,6 +2358,135 @@ function reelsRemoveWatermark(idx) {
     _reelsSaveWatermarks();
 }
 
+const REELS_WATERMARK_PRESETS_KEY = 'reels_watermark_presets';
+
+function _getWatermarkPresets() {
+    try {
+        return JSON.parse(localStorage.getItem(REELS_WATERMARK_PRESETS_KEY)) || {};
+    } catch {
+        return {};
+    }
+}
+
+function _saveWatermarkPresets(presets) {
+    localStorage.setItem(REELS_WATERMARK_PRESETS_KEY, JSON.stringify(presets));
+}
+
+function _refreshWatermarkPresetList() {
+    const select = document.getElementById('reels-watermark-preset-select');
+    if (!select) return;
+    const presets = _getWatermarkPresets();
+    const currVal = select.value;
+    select.innerHTML = '<option value="">-- 选择预设 --</option>';
+    for (const name in presets) {
+        const opt = document.createElement('option');
+        opt.value = name;
+        opt.textContent = name;
+        select.appendChild(opt);
+    }
+    if (presets[currVal]) {
+        select.value = currVal;
+    }
+}
+
+async function reelsSaveWatermarkPreset() {
+    if (!_reelsState.watermarks || _reelsState.watermarks.length === 0) {
+        alert('当前没有水印，无法保存预设');
+        return;
+    }
+    try {
+        const name = await _showInputDialog('保存水印组合预设', '请输入预设名称（包含所有启用的水印）');
+        if (!name) return;
+        const presets = _getWatermarkPresets();
+        presets[name] = JSON.parse(JSON.stringify(_reelsState.watermarks));
+        _saveWatermarkPresets(presets);
+        _refreshWatermarkPresetList();
+        const select = document.getElementById('reels-watermark-preset-select');
+        if (select) select.value = name;
+    } catch (e) {
+        console.error('Save watermark preset error:', e);
+    }
+}
+
+function reelsLoadWatermarkPreset() {
+    const select = document.getElementById('reels-watermark-preset-select');
+    if (!select) return;
+    const name = select.value;
+    if (!name) return;
+    const presets = _getWatermarkPresets();
+    if (presets[name]) {
+        _reelsState.watermarks = JSON.parse(JSON.stringify(presets[name]));
+        localStorage.setItem(REELS_WATERMARK_STORAGE_KEY, JSON.stringify(_reelsState.watermarks));
+        _reelsRefreshWatermarkUI();
+        if (typeof reelsUpdatePreview === 'function') reelsUpdatePreview();
+    }
+}
+
+function reelsDeleteWatermarkPreset() {
+    const select = document.getElementById('reels-watermark-preset-select');
+    if (!select) return;
+    const name = select.value;
+    if (!name) {
+        alert('请先选择要删除的预设');
+        return;
+    }
+    if (confirm(`确定要删除水印预设 "${name}" 吗？`)) {
+        const presets = _getWatermarkPresets();
+        delete presets[name];
+        _saveWatermarkPresets(presets);
+        _refreshWatermarkPresetList();
+        select.value = '';
+    }
+}
+
+function reelsExportWatermarkPresets() {
+    const presets = _getWatermarkPresets();
+    if (Object.keys(presets).length === 0) {
+        alert('没有可以导出的水印预设！');
+        return;
+    }
+    const jsonStr = JSON.stringify(presets, null, 2);
+    const blob = new Blob([jsonStr], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `watermark_presets_${new Date().toISOString().split('T')[0]}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+}
+
+function reelsImportWatermarkPresets() {
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = '.json';
+    input.onchange = (e) => {
+        const file = e.target.files[0];
+        if (!file) return;
+        const reader = new FileReader();
+        reader.onload = (ev) => {
+            try {
+                const imported = JSON.parse(ev.target.result);
+                if (typeof imported !== 'object' || imported === null) throw new Error('Invalid JSON');
+                const presets = _getWatermarkPresets();
+                let count = 0;
+                for (const k in imported) {
+                    if (Array.isArray(imported[k])) {
+                        presets[k] = imported[k];
+                        count++;
+                    }
+                }
+                _saveWatermarkPresets(presets);
+                _refreshWatermarkPresetList();
+                alert(`成功导入了 ${count} 个水印预设！`);
+            } catch (err) {
+                alert('导入失败，请检查是否是有效的水印预设 JSON 文件！');
+            }
+        };
+        reader.readAsText(file);
+    };
+    input.click();
+}
+
 function _reelsSyncWatermarkFromUI() {
     const list = document.getElementById('reels-watermark-list');
     if (!list) return;
@@ -2201,6 +2538,7 @@ document.addEventListener('DOMContentLoaded', () => {
     setTimeout(() => {
         _reelsLoadWatermarks();
         _reelsRefreshWatermarkUI();
+        _refreshWatermarkPresetList();
     }, 500);
 });
 
@@ -4375,6 +4713,7 @@ function _reelsApplyDefaultPreset() {
     }
 
     const style = ReelsStyleEngine.applySubtitlePreset(defaultName);
+    _reelsState.style = Object.assign({}, _reelsState.style || {}, style);
     _writeStyleToUI(style);
     const select = document.getElementById('reels-preset-select');
     if (select) select.value = defaultName;
@@ -4463,6 +4802,7 @@ function reelsLoadPreset(silent = false) {
     if (!name) { if (!silent) alert('请先选择一个预设'); return; }
     if (window.ReelsStyleEngine) {
         const style = ReelsStyleEngine.applySubtitlePreset(name);
+        _reelsState.style = Object.assign({}, _reelsState.style || {}, style);
         _writeStyleToUI(style);
         reelsUpdatePreview();
     }
@@ -4945,7 +5285,19 @@ async function reelsStartExport() {
         if (statusEl) statusEl.textContent = `导出中 ${i + 1}/${tasks.length}: ${task.fileName}`;
 
         try {
-            const baseName = (task.fileName || `${task.baseName || 'reel'}.mp4`).replace(/\.[^.]+$/, '');
+            let customName = (task.exportName || '').trim();
+            let baseName = '';
+            if (customName) {
+                baseName = customName;
+            } else {
+                let fallbackText = (task.txtContent || task.aiScript || task.ttsText || '').replace(/[\r\n\t]/g, '').trim();
+                if (fallbackText) {
+                    baseName = fallbackText.substring(0, 50).trim().replace(/[<>:"/\\|?*]+/g, '_');
+                } else {
+                    baseName = task.fileName || task.baseName || 'reel';
+                }
+            }
+            baseName = baseName.replace(/\.[^.]+$/, '');
             const outputPath = `${outputDirTrimmed}${outputJoinSep}${baseName}${suffix}.mp4`;
             let bgPath = task.bgPath || task.videoPath;
             

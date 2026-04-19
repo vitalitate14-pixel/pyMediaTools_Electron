@@ -2829,6 +2829,8 @@
                           <div class="param-row" style="flex-wrap: wrap; gap: 10px; margin-bottom: 6px;">
                     <label class="checkbox-label"><input type="checkbox" id="reels-use-box"
                         onchange="reelsUpdatePreview()"><span>背景框</span></label>
+                    <label class="checkbox-label" title="开启后，多行字幕将根据单行宽度分别绘制背景块"><input type="checkbox" id="reels-box-adaptive-width"
+                        onchange="reelsUpdatePreview()"><span>贴合行宽</span></label>
                     <div style="display: flex; align-items: center; gap: 4px;">
                       <input type="color" id="reels-box-color" value="#000000"
                         style="width: 36px; height: 28px; border: none; cursor: pointer;"
@@ -3058,9 +3060,54 @@
                         </div>
                       </details>
     
-                      <!-- 4. 排版与定位 -->
+                      <!-- 4. 自动着色 -->
                       <details style="margin-bottom: 10px;">
-                        <summary style="cursor: pointer; font-size: 13px; font-weight: 600; color: var(--text-color);">4. 排版与定位</summary>
+                        <summary style="cursor: pointer; font-size: 13px; font-weight: 600; color: var(--text-color);">4. 自动着色</summary>
+                        <div style="padding: 8px; background: var(--bg-secondary); border-radius: 6px; margin-top: 4px; border: 1px solid var(--border-color);">
+                          <div style="font-size: 12px; color: var(--text-secondary); margin-bottom: 6px;">
+                            自动匹配关键词并应用专属颜色。配置后对所有片段生效。
+                          </div>
+                          
+                          <div id="reels-autocolor-rules" style="display:flex;flex-direction:column;gap:6px;max-height:250px;overflow-y:auto;padding-right:4px;">
+                            <!-- Rules will be injected here via JS -->
+                          </div>
+                          
+                          <div style="display:flex; gap:6px; margin-top:8px; flex-wrap:wrap;">
+                              <button class="btn btn-secondary" style="font-size:11px;padding:3px 8px;" onclick="reelsAddAutoColorRule('keyword')">+ 关键词</button>
+                              <button class="btn btn-secondary" style="font-size:11px;padding:3px 8px;" onclick="reelsAddAutoColorRule('number')">+ 数字高亮</button>
+                              <button class="btn btn-secondary" style="font-size:11px;padding:3px 8px;" onclick="reelsAddAutoColorRule('english')">+ 英文高亮</button>
+                          </div>
+                        </div>
+                      </details>
+
+                      <!-- 4.5 滚动歌词模式 -->
+                      <details style="margin-bottom: 10px;">
+                        <summary style="cursor: pointer; font-size: 13px; font-weight: 600; color: var(--text-color);">🔄 滚动歌词模式</summary>
+                        <div style="padding: 8px; background: var(--bg-secondary); border-radius: 6px; margin-top: 4px; border: 1px solid var(--border-color);">
+                          <label style="display:flex;align-items:center;gap:6px;cursor:pointer;margin-bottom:8px;">
+                            <input type="checkbox" id="reels-scrolling-mode" style="accent-color:var(--accent);"
+                              onchange="const o=document.getElementById('reels-scrolling-options');if(o)o.style.display=this.checked?'':'none';if(typeof reelsUpdatePreview==='function')reelsUpdatePreview();">
+                            启用滚动歌词（多行上下文显示）
+                          </label>
+                          <div id="reels-scrolling-options" style="display:none;">
+                            <div class="param-row" style="margin-bottom:6px;">
+                              <label style="min-width:80px;">可见行数:</label>
+                              <input type="number" id="reels-scrolling-lines" class="input" value="3" min="1" max="9" step="2" style="width:60px;"
+                                onchange="if(typeof reelsUpdatePreview==='function')reelsUpdatePreview();">
+                            </div>
+                            <div class="param-row">
+                              <label style="min-width:80px;">上下文透明:</label>
+                              <input type="range" id="reels-scrolling-opacity" min="0" max="1" step="0.05" value="0.3" style="flex:1;"
+                                oninput="if(typeof reelsUpdatePreview==='function')reelsUpdatePreview();">
+                            </div>
+                            <div style="font-size:11px;color:var(--text-secondary);margin-top:6px;">💡 需要加载含多句字幕的 SRT 文件才能看到滚动效果</div>
+                          </div>
+                        </div>
+                      </details>
+
+                      <!-- 5. 排版与定位 -->
+                      <details style="margin-bottom: 10px;">
+                        <summary style="cursor: pointer; font-size: 13px; font-weight: 600; color: var(--text-color);">5. 排版与定位</summary>
                         <div style="padding: 8px; background: var(--bg-secondary); border-radius: 6px; margin-top: 4px; border: 1px solid var(--border-color);">
                           <div style="font-size: 12px; color: var(--text-secondary); margin-bottom: 6px; font-weight:600;">基础排版</div>
                           <div class="param-row" style="flex-wrap: wrap; gap: 10px; margin-bottom: 10px;">
@@ -3289,6 +3336,20 @@
                 <!-- Tab: 水印 -->
                 <div id="inspector-tab-watermark" style="display:none; flex:1; overflow-y:scroll; scrollbar-gutter: stable; padding:10px;">
                   <h3 class="section-title">🔒 AI 水印</h3>
+                  <div style="margin-bottom: 10px; padding: 8px; border: 1px solid var(--border-color); border-radius: 8px; background: var(--bg-secondary);">
+                    <div class="param-row" style="flex-wrap: wrap; gap: 8px;">
+                      <label style="width: 60px;">水印预设:</label>
+                      <select id="reels-watermark-preset-select" class="select" style="flex:1; min-width:120px;" onchange="reelsLoadWatermarkPreset()">
+                        <option value="">-- 选择预设 --</option>
+                      </select>
+                    </div>
+                    <div class="param-row" style="margin-top: 6px; gap: 6px; align-items: center; flex-wrap: wrap;">
+                      <button class="btn btn-secondary" style="font-size: 11px; padding: 3px 10px; flex:0 0 auto;" onclick="reelsSaveWatermarkPreset()">保存组合</button>
+                      <button class="btn btn-secondary" style="font-size: 11px; padding: 3px 10px; flex:0 0 auto;" onclick="reelsDeleteWatermarkPreset()">删除</button>
+                      <button class="btn btn-secondary" style="font-size: 11px; padding: 3px 10px; flex:0 0 auto;" onclick="reelsExportWatermarkPresets()">导出</button>
+                      <button class="btn btn-secondary" style="font-size: 11px; padding: 3px 10px; flex:0 0 auto;" onclick="reelsImportWatermarkPresets()">导入</button>
+                    </div>
+                  </div>
                   <div id="reels-watermark-list" style="font-size:12px; max-height:300px; overflow-y:auto;"></div>
                   <button class="btn btn-secondary" style="font-size:11px; padding:3px 10px; margin-top:6px;"
                     onclick="reelsAddWatermark()">➕ 添加水印</button>
@@ -3735,6 +3796,150 @@
               💡 <strong>快捷键</strong>：按 <kbd style="background:var(--bg-hover-strong);padding:1px 6px;border-radius:3px;">Ctrl/⌘</kbd> + <kbd style="background:var(--bg-hover-strong);padding:1px 6px;border-radius:3px;">+</kbd> 放大，<kbd style="background:var(--bg-hover-strong);padding:1px 6px;border-radius:3px;">Ctrl/⌘</kbd> + <kbd style="background:var(--bg-hover-strong);padding:1px 6px;border-radius:3px;">-</kbd> 缩小，<kbd style="background:var(--bg-hover-strong);padding:1px 6px;border-radius:3px;">Ctrl/⌘</kbd> + <kbd style="background:var(--bg-hover-strong);padding:1px 6px;border-radius:3px;">0</kbd> 重置
             </div>
           </div>
+
+          <div class="form-section">
+            <h3 class="section-title">📂 默认输出目录</h3>
+            <p class="hint">设置音频、字幕、视频等文件的默认生成位置。留空则使用系统「下载」文件夹。</p>
+            <div style="background: var(--bg-card); border: 1px solid var(--border-color); border-radius: 8px; padding: 14px; margin: 12px 0;">
+              <div style="display: flex; align-items: center; gap: 8px;">
+                <input type="text" id="settings-default-output-dir" class="input file-path" placeholder="默认使用「下载」文件夹" readonly
+                  style="flex:1; font-size: 12px;">
+                <button class="btn btn-secondary" style="font-size: 11px; padding: 4px 12px;" onclick="settingsSelectDefaultOutputDir()">📁 选择</button>
+                <button class="btn btn-secondary" style="font-size: 11px; padding: 4px 12px; color: #ff8a8a;" onclick="settingsClearDefaultOutputDir()">↺ 恢复默认</button>
+              </div>
+              <div id="settings-output-dir-hint" style="margin-top: 6px; font-size: 10px; color: var(--text-muted);"></div>
+            </div>
+          </div>
+
+          <script>
+          // ── 默认输出目录设置 ──
+          (function() {
+            const saved = localStorage.getItem('vk_default_output_dir');
+            setTimeout(() => {
+              const el = document.getElementById('settings-default-output-dir');
+              const hint = document.getElementById('settings-output-dir-hint');
+              if (el && saved) {
+                el.value = saved;
+                if (hint) hint.textContent = '✅ 已设置自定义输出目录';
+              } else if (hint) {
+                hint.textContent = '💡 当前使用系统「下载」文件夹';
+              }
+            }, 200);
+          })();
+          async function settingsSelectDefaultOutputDir() {
+            if (!window.electronAPI || !window.electronAPI.selectDirectory) return;
+            const dir = await window.electronAPI.selectDirectory();
+            if (dir) {
+              localStorage.setItem('vk_default_output_dir', dir);
+              const el = document.getElementById('settings-default-output-dir');
+              const hint = document.getElementById('settings-output-dir-hint');
+              if (el) el.value = dir;
+              if (hint) hint.textContent = '✅ 已设置自定义输出目录';
+              if (typeof showToast === 'function') showToast('默认输出目录已更新', 'success');
+            }
+          }
+          function settingsClearDefaultOutputDir() {
+            localStorage.removeItem('vk_default_output_dir');
+            const el = document.getElementById('settings-default-output-dir');
+            const hint = document.getElementById('settings-output-dir-hint');
+            if (el) el.value = '';
+            if (hint) hint.textContent = '💡 已恢复为系统「下载」文件夹';
+            if (typeof showToast === 'function') showToast('已恢复为默认下载文件夹', 'success');
+          }
+          </script>
+
+          <div class="form-section">
+            <h3 class="section-title">🗂️ 缓存管理</h3>
+            <p class="hint">清理应用缓存释放磁盘空间。<strong style="color:#4a9eff;">清理不会删除您的预设和设置</strong>，仅清除运行时缓存。</p>
+            <div style="background: var(--bg-card); border: 1px solid var(--border-color); border-radius: 8px; padding: 14px; margin: 12px 0;">
+              <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 10px;">
+                <span style="font-size: 11px; color: var(--text-secondary);">📁 缓存位置:</span>
+                <code id="settings-cache-path" style="flex:1; font-size: 11px; color: var(--text-primary); background: var(--bg-tertiary); padding: 4px 8px; border-radius: 4px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">加载中...</code>
+                <button class="btn btn-secondary" style="font-size: 10px; padding: 3px 8px;" onclick="window.electronAPI && window.electronAPI.openCacheFolder()">📂 打开</button>
+                <button class="btn btn-secondary" style="font-size: 10px; padding: 3px 8px;" onclick="settingsChangeCachePath()">📁 更改位置</button>
+                <button class="btn btn-secondary" style="font-size: 10px; padding: 3px 8px; color:#ff8a8a;" onclick="settingsResetCachePath()">↺ 恢复默认</button>
+              </div>
+              <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 12px;">
+                <span style="font-size: 11px; color: var(--text-secondary);">💾 缓存大小:</span>
+                <span id="settings-cache-size" style="font-size: 14px; font-weight: 600; color: var(--text-primary);">计算中...</span>
+                <span id="settings-cache-detail" style="font-size: 10px; color: var(--text-muted);"></span>
+              </div>
+              <div style="display: flex; gap: 8px; align-items: center;">
+                <button id="settings-clear-cache-btn" class="btn btn-primary" style="font-size: 12px; padding: 6px 18px;" onclick="settingsClearCache()">🧹 一键清理缓存</button>
+                <button class="btn btn-secondary" style="font-size: 11px; padding: 4px 12px;" onclick="settingsRefreshCacheInfo()">🔄 刷新</button>
+                <span id="settings-cache-status" style="font-size: 11px; color: var(--text-muted);"></span>
+              </div>
+            </div>
+            <div style="padding: 8px 12px; background: rgba(74,158,255,0.08); border: 1px solid rgba(74,158,255,0.2); border-radius: 6px; font-size: 11px; line-height: 1.6; color: var(--text-secondary);">
+              💡 <strong>清理内容</strong>：V8编译缓存、GPU缓存、网页资源缓存等运行时文件。<br>
+              🔒 <strong>保留内容</strong>：所有字幕预设、API Key、主题设置、水印模板等用户数据。
+            </div>
+          </div>
+
+          <script>
+          function _formatSize(bytes) {
+            if (bytes < 1024) return bytes + ' B';
+            if (bytes < 1024*1024) return (bytes/1024).toFixed(1) + ' KB';
+            if (bytes < 1024*1024*1024) return (bytes/1024/1024).toFixed(1) + ' MB';
+            return (bytes/1024/1024/1024).toFixed(2) + ' GB';
+          }
+          async function settingsRefreshCacheInfo() {
+            if (!window.electronAPI || !window.electronAPI.getCacheInfo) return;
+            try {
+              const info = await window.electronAPI.getCacheInfo();
+              const pathEl = document.getElementById('settings-cache-path');
+              const sizeEl = document.getElementById('settings-cache-size');
+              const detailEl = document.getElementById('settings-cache-detail');
+              if (pathEl) pathEl.textContent = info.path;
+              if (sizeEl) sizeEl.textContent = _formatSize(info.totalSize);
+              if (detailEl && info.details) {
+                detailEl.textContent = '(' + info.details.map(d => d.name + ': ' + _formatSize(d.size)).join(', ') + ')';
+              }
+            } catch(e) { console.warn('Cache info error', e); }
+          }
+          async function settingsClearCache() {
+            if (!window.electronAPI || !window.electronAPI.clearCache) return;
+            const btn = document.getElementById('settings-clear-cache-btn');
+            const status = document.getElementById('settings-cache-status');
+            if (btn) { btn.disabled = true; btn.textContent = '⏳ 清理中...'; }
+            try {
+              const result = await window.electronAPI.clearCache();
+              if (status) status.textContent = '✅ 已释放 ' + _formatSize(result.freedSize);
+              if (status) status.style.color = '#4caf50';
+              await settingsRefreshCacheInfo();
+              if (typeof showToast === 'function') showToast('缓存已清理，已释放 ' + _formatSize(result.freedSize), 'success');
+            } catch(e) {
+              if (status) { status.textContent = '❌ 清理失败: ' + e.message; status.style.color = '#ff6b6b'; }
+            } finally {
+              if (btn) { btn.disabled = false; btn.textContent = '🧹 一键清理缓存'; }
+            }
+          }
+          // 进入设置页时自动加载
+          setTimeout(settingsRefreshCacheInfo, 500);
+
+          async function settingsChangeCachePath() {
+            if (!window.electronAPI || !window.electronAPI.selectDirectory || !window.electronAPI.setCachePath) return;
+            const dir = await window.electronAPI.selectDirectory();
+            if (!dir) return;
+            const result = await window.electronAPI.setCachePath(dir);
+            if (result.ok) {
+              if (typeof showToast === 'function') showToast('缓存路径已更改为: ' + dir + '，重启后生效', 'success');
+              const status = document.getElementById('settings-cache-status');
+              if (status) { status.textContent = '⚠️ 需要重启应用生效'; status.style.color = '#ffaa33'; }
+            } else {
+              if (typeof showToast === 'function') showToast('设置失败: ' + result.error, 'error');
+            }
+          }
+          async function settingsResetCachePath() {
+            if (!window.electronAPI || !window.electronAPI.setCachePath) return;
+            const result = await window.electronAPI.setCachePath(null);
+            if (result.ok) {
+              if (typeof showToast === 'function') showToast('已恢复默认缓存路径，重启后生效', 'success');
+              const status = document.getElementById('settings-cache-status');
+              if (status) { status.textContent = '⚠️ 需要重启应用生效'; status.style.color = '#ffaa33'; }
+            }
+          }
+          </script>
 
           <div class="form-section">
             <h3 class="section-title">关于</h3>

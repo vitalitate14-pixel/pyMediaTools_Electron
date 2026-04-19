@@ -301,7 +301,17 @@ class ReelsOverlayPanel {
                             <option value="600">SemiBold</option><option value="700" selected>Bold</option>
                             <option value="800">ExtraBold</option><option value="900">Black</option>
                         </select>
+                        <label>标题大写</label><input type="checkbox" id="rop-scroll-title-uppercase" checked>
+                        <label>字间距</label><input type="number" id="rop-scroll-title-letterspacing" class="rop-input" min="-20" max="100" value="0">
                         <label>标题间距</label><input type="number" id="rop-scroll-title-gap" class="rop-input" min="0" max="200" step="5" value="20">
+                        <div style="grid-column: span 2; font-size:11px; color:var(--accent); margin-top:6px; margin-bottom:2px; border-bottom: 1px solid var(--border-color); padding-bottom: 4px;">标题特效</div>
+                        <label>描边颜色</label><input type="color" id="rop-scroll-title-stroke-color" class="rop-color" value="#000000">
+                        <label>描边宽度</label><input type="number" id="rop-scroll-title-stroke-width" class="rop-input" min="0" max="20" step="0.5" value="0">
+                        <label>开启阴影</label><input type="checkbox" id="rop-scroll-title-shadow">
+                        <label>阴影颜色</label><input type="color" id="rop-scroll-title-shadow-color" class="rop-color" value="#000000">
+                        <label>阴影模糊</label><input type="number" id="rop-scroll-title-shadow-blur" class="rop-input" min="0" max="50" value="4">
+                        <label>阴影偏移X</label><input type="number" id="rop-scroll-title-shadow-x" class="rop-input" min="-20" max="20" value="2">
+                        <label>阴影偏移Y</label><input type="number" id="rop-scroll-title-shadow-y" class="rop-input" min="-20" max="20" value="2">
                     </div>
 
                     <div class="rop-group-title" style="margin-top:6px;">正文</div>
@@ -321,22 +331,22 @@ class ReelsOverlayPanel {
                             <option value="400" selected>Regular</option><option value="500">Medium</option><option value="600">SemiBold</option>
                             <option value="700">Bold</option><option value="800">ExtraBold</option><option value="900">Black</option>
                         </select>
+                        <label>正文大写</label><input type="checkbox" id="rop-scroll-uppercase">
+                        <label>字间距</label><input type="number" id="rop-scroll-letterspacing" class="rop-input" min="-20" max="100" value="0">
                         <label>对齐</label>
                         <select id="rop-scroll-align" class="rop-select">
                             <option value="center">居中</option><option value="left">左对齐</option><option value="right">右对齐</option>
                         </select>
                         <label>行距</label><input type="number" id="rop-scroll-linespacing" class="rop-input" min="0" max="50" step="1" value="6">
                         <label>文本宽度</label><input type="number" id="rop-scroll-textw" class="rop-input" min="100" max="1920" step="10" value="900">
-                    </div>
-
-                    <!-- ② 文字效果：描边 + 阴影 -->
-                    <div class="rop-group-title" style="margin-top:8px;">文字效果</div>
-                    <div class="rop-grid">
-                        <label>描边色</label><input type="color" id="rop-scroll-stroke-color" class="rop-color" value="#000000">
-                        <label>描边宽</label><input type="number" id="rop-scroll-stroke-width" class="rop-input" min="0" max="20" step="0.5" value="0">
-                        <label>阴影</label><input type="checkbox" id="rop-scroll-shadow">
-                        <label>阴影色</label><input type="color" id="rop-scroll-shadow-color" class="rop-color" value="#000000">
+                        <div style="grid-column: span 2; font-size:11px; color:var(--accent); margin-top:6px; margin-bottom:2px; border-bottom: 1px solid var(--border-color); padding-bottom: 4px;">正文特效</div>
+                        <label>描边颜色</label><input type="color" id="rop-scroll-stroke-color" class="rop-color" value="#000000">
+                        <label>描边宽度</label><input type="number" id="rop-scroll-stroke-width" class="rop-input" min="0" max="20" step="0.5" value="0">
+                        <label>开启阴影</label><input type="checkbox" id="rop-scroll-shadow">
+                        <label>阴影颜色</label><input type="color" id="rop-scroll-shadow-color" class="rop-color" value="#000000">
                         <label>阴影模糊</label><input type="number" id="rop-scroll-shadow-blur" class="rop-input" min="0" max="50" value="4">
+                        <label>阴影偏移X</label><input type="number" id="rop-scroll-shadow-x" class="rop-input" min="-20" max="20" value="2">
+                        <label>阴影偏移Y</label><input type="number" id="rop-scroll-shadow-y" class="rop-input" min="-20" max="20" value="2">
                     </div>
 
                     <!-- ③ 滚动运动：位置参数 -->
@@ -628,6 +638,24 @@ class ReelsOverlayPanel {
                     </div>
                 </div>
 
+                <!-- 自动着色 -->
+                <div class="rop-group" id="rop-autocolor-props">
+                    <div class="rop-group-title">🎨 自动着色</div>
+                    <div style="padding:4px 0;">
+                        <div id="rop-autocolor-rules" style="display:flex;flex-direction:column;gap:6px;margin-bottom:8px;"></div>
+                        <div style="display:flex;gap:4px;flex-wrap:wrap;">
+                            <button id="rop-autocolor-add" class="btn btn-secondary" style="font-size:11px;padding:3px 8px;">+ 添加关键词规则</button>
+                            <button id="rop-autocolor-clear" class="btn btn-secondary" style="font-size:11px;padding:3px 8px;opacity:0.7;">清空全部</button>
+                        </div>
+                        <div style="margin-top:6px;font-size:10px;color:var(--text-secondary,#888);">
+                            快捷预设:
+                            <span class="rop-autocolor-preset" data-preset="gold_numbers" style="cursor:pointer;color:var(--accent-primary,#7b8bef);margin-left:4px;" title="数字→金色加粗">🌟金色数字</span>
+                            <span class="rop-autocolor-preset" data-preset="brand" style="cursor:pointer;color:var(--accent-primary,#7b8bef);margin-left:4px;" title="英文→青色, 数字→金色">🎯品牌高亮</span>
+                            <span class="rop-autocolor-preset" data-preset="red_emphasis" style="cursor:pointer;color:var(--accent-primary,#7b8bef);margin-left:4px;" title="数字+标点→红色加粗">🔥红色重点</span>
+                        </div>
+                    </div>
+                </div>
+
                 <!-- 操作 -->
                 <div class="rop-actions">
                     <button class="btn btn-secondary rop-btn-full" id="rop-duplicate">📋 复制覆层</button>
@@ -815,6 +843,52 @@ class ReelsOverlayPanel {
                 if (ov.type === 'image') ov.scale = 1;
                 this._syncFromOverlay(ov);
                 if (this.videoCanvas) this.videoCanvas.render();
+            });
+        });
+
+        // ── Auto-Colorize UI Events ──
+        this.container.querySelector('#rop-autocolor-add')?.addEventListener('click', () => {
+            if (!this._selectedOv) return;
+            const ov = this._selectedOv;
+            ov.auto_color_rules = ov.auto_color_rules || [];
+            ov.auto_color_rules.push({
+                type: 'keyword',
+                keywords: [''],
+                color: '#FFD700',
+                bold: true,
+                fontsize: null
+            });
+            this._renderAutoColorRules();
+            this._triggerOverlayChange();
+        });
+
+        this.container.querySelector('#rop-autocolor-clear')?.addEventListener('click', () => {
+            if (!this._selectedOv) return;
+            this._selectedOv.auto_color_rules = [];
+            this._renderAutoColorRules();
+            this._triggerOverlayChange();
+        });
+
+        this.container.querySelectorAll('.rop-autocolor-preset').forEach(btn => {
+            btn.addEventListener('click', () => {
+                if (!this._selectedOv) return;
+                const preset = btn.getAttribute('data-preset');
+                const ov = this._selectedOv;
+                ov.auto_color_rules = ov.auto_color_rules || [];
+                
+                if (preset === 'gold_numbers') {
+                    // 数字 -> 金色
+                    ov.auto_color_rules.push({ type: 'number', keywords: ['\\d+(\\.\\d+)?'], color: '#FFD700', bold: true });
+                } else if (preset === 'brand') {
+                    ov.auto_color_rules.push({ type: 'english', keywords: ['[a-zA-Z]+'], color: '#00D4FF', bold: true });
+                    ov.auto_color_rules.push({ type: 'number', keywords: ['\\d+(\\.\\d+)?'], color: '#FFD700', bold: true });
+                } else if (preset === 'red_emphasis') {
+                    ov.auto_color_rules.push({ type: 'number', keywords: ['\\d+(\\.\\d+)?'], color: '#FF4444', bold: true });
+                    ov.auto_color_rules.push({ type: 'punctuation', keywords: ['[!?！？❤️⭐✨🔥💪…]+'], color: '#FF4444', bold: true });
+                }
+                
+                this._renderAutoColorRules();
+                this._triggerOverlayChange();
             });
         });
 
@@ -2245,8 +2319,17 @@ class ReelsOverlayPanel {
             this._val('rop-scroll-title-fontsize', ov.scroll_title_fontsize ?? 56);
             this._val('rop-scroll-title-color', ov.scroll_title_color || ov.color || '#ffffff');
             this._val('rop-scroll-title-weight', ov.scroll_title_font_weight ?? 700);
+            this._val('rop-scroll-title-uppercase', ov.scroll_title_uppercase !== false);
+            this._val('rop-scroll-title-letterspacing', ov.scroll_title_letter_spacing || 0);
             this._val('rop-scroll-title-gap', ov.scroll_title_gap ?? 20);
             this._val('rop-scroll-title-fixed', ov.scroll_title_fixed !== false);
+            this._val('rop-scroll-title-stroke-color', ov.scroll_title_stroke_color || '#000000');
+            this._val('rop-scroll-title-stroke-width', ov.scroll_title_stroke_width || 0);
+            this._val('rop-scroll-title-shadow', ov.scroll_title_shadow_enabled || false);
+            this._val('rop-scroll-title-shadow-color', ov.scroll_title_shadow_color || '#000000');
+            this._val('rop-scroll-title-shadow-blur', ov.scroll_title_shadow_blur || 4);
+            this._val('rop-scroll-title-shadow-x', ov.scroll_title_shadow_x || 2);
+            this._val('rop-scroll-title-shadow-y', ov.scroll_title_shadow_y || 2);
             // 正文
             this._val('rop-scroll-font', ov.font_family || 'Arial');
             this._refreshWeightOptions('rop-scroll-weight', ov.font_family || 'Arial');
@@ -2255,6 +2338,8 @@ class ReelsOverlayPanel {
             const sw = Math.max(100, Math.min(900, parseInt(ov.font_weight || (ov.bold ? 700 : 400), 10) || 400));
             this._val('rop-scroll-weight', sw);
             this._val('rop-scroll-bold', sw >= 600);
+            this._val('rop-scroll-uppercase', ov.scroll_uppercase !== false);
+            this._val('rop-scroll-letterspacing', ov.scroll_letter_spacing || 0);
             this._val('rop-scroll-align', ov.text_align || 'center');
             this._val('rop-scroll-linespacing', ov.line_spacing ?? 6);
             this._val('rop-scroll-textw', ov.text_width ?? 900);
@@ -2263,6 +2348,8 @@ class ReelsOverlayPanel {
             this._val('rop-scroll-shadow', ov.shadow_enabled || false);
             this._val('rop-scroll-shadow-color', ov.shadow_color || '#000000');
             this._val('rop-scroll-shadow-blur', ov.shadow_blur || 4);
+            this._val('rop-scroll-shadow-x', ov.scroll_shadow_x || 2);
+            this._val('rop-scroll-shadow-y', ov.scroll_shadow_y || 2);
             // 独立同步 起始Y 和 结束Y
             this._val('rop-scroll-from-y', ov.scroll_from_y ?? 960);
             this._val('rop-scroll-to-y', ov.scroll_to_y ?? -200);
@@ -2523,8 +2610,17 @@ class ReelsOverlayPanel {
             ov.scroll_title_font_weight = this._get('rop-scroll-title-weight') || 700;
             ov.scroll_title_bold = (ov.scroll_title_font_weight >= 600);
             ov.scroll_title_color = this._get('rop-scroll-title-color') || '';
+            ov.scroll_title_uppercase = this._get('rop-scroll-title-uppercase');
+            ov.scroll_title_letter_spacing = this._get('rop-scroll-title-letterspacing');
             ov.scroll_title_gap = this._get('rop-scroll-title-gap') ?? 20;
             ov.scroll_title_fixed = this._get('rop-scroll-title-fixed');
+            ov.scroll_title_stroke_color = this._get('rop-scroll-title-stroke-color');
+            ov.scroll_title_stroke_width = this._get('rop-scroll-title-stroke-width');
+            ov.scroll_title_shadow_enabled = this._get('rop-scroll-title-shadow');
+            ov.scroll_title_shadow_color = this._get('rop-scroll-title-shadow-color');
+            ov.scroll_title_shadow_blur = this._get('rop-scroll-title-shadow-blur');
+            ov.scroll_title_shadow_x = this._get('rop-scroll-title-shadow-x');
+            ov.scroll_title_shadow_y = this._get('rop-scroll-title-shadow-y');
             // 正文
             ov.font_family = this._get('rop-scroll-font');
             ov.fontsize = this._get('rop-scroll-fontsize');
@@ -2532,6 +2628,8 @@ class ReelsOverlayPanel {
             const sw = Math.max(100, Math.min(900, parseInt(this._get('rop-scroll-weight') || (this._get('rop-scroll-bold') ? 700 : 400), 10) || 400));
             ov.font_weight = sw;
             ov.bold = sw >= 600;
+            ov.scroll_uppercase = this._get('rop-scroll-uppercase');
+            ov.scroll_letter_spacing = this._get('rop-scroll-letterspacing');
             ov.text_align = this._get('rop-scroll-align');
             ov.line_spacing = this._get('rop-scroll-linespacing');
             ov.text_width = this._get('rop-scroll-textw');
@@ -2541,6 +2639,8 @@ class ReelsOverlayPanel {
             ov.shadow_enabled = this._get('rop-scroll-shadow');
             ov.shadow_color = this._get('rop-scroll-shadow-color');
             ov.shadow_blur = this._get('rop-scroll-shadow-blur');
+            ov.scroll_shadow_x = this._get('rop-scroll-shadow-x');
+            ov.scroll_shadow_y = this._get('rop-scroll-shadow-y');
             // 独立获取设置，解耦拖动逻辑防止双重偏移修改死循环
             ov.scroll_from_y = this._get('rop-scroll-from-y') ?? 960;
             ov.scroll_to_y = this._get('rop-scroll-to-y') ?? -200;
@@ -2571,6 +2671,17 @@ class ReelsOverlayPanel {
 
         // Fixed text flag
         ov.fixed_text = this._get('rop-fixed-text');
+
+        // Auto-Colorize panel visibility & sync
+        const autoColorProps = this.container.querySelector('#rop-autocolor-props');
+        if (autoColorProps) {
+            if (ov.type === 'textcard' || ov.type === 'scroll') {
+                autoColorProps.style.display = '';
+                this._renderAutoColorRules();
+            } else {
+                autoColorProps.style.display = 'none';
+            }
+        }
 
         // Re-render canvas to reflect changes
         if (this.videoCanvas) this.videoCanvas.render();
@@ -2650,6 +2761,118 @@ class ReelsOverlayPanel {
             select.appendChild(opt);
         }
         if (current && templates[current]) select.value = current;
+    }
+
+    /**
+     * 渲染自动着色规则列表 UI
+     */
+    _renderAutoColorRules() {
+        if (!this.container) return;
+        const container = this.container.querySelector('#rop-autocolor-rules');
+        if (!container) return;
+        container.innerHTML = '';
+        
+        const ov = this._selectedOv;
+        if (!ov || !ov.auto_color_rules || ov.auto_color_rules.length === 0) {
+            container.innerHTML = '<div style="color:var(--text-secondary,#888);font-size:12px;text-align:center;padding:4px;">(暂无规则)</div>';
+            return;
+        }
+
+        ov.auto_color_rules.forEach((rule, idx) => {
+            const ruleDiv = document.createElement('div');
+            ruleDiv.style.cssText = 'border:1px solid var(--border-color,#444);border-radius:4px;padding:4px 6px;background:var(--bg-tertiary,#1e1e2d);display:flex;flex-direction:column;gap:4px;';
+            
+            // Header: Type + Delete
+            const header = document.createElement('div');
+            header.style.cssText = 'display:flex;justify-content:space-between;align-items:center;font-size:11px;';
+            
+            const select = document.createElement('select');
+            select.className = 'rop-select';
+            select.style.cssText = 'padding:2px 4px;font-size:11px;height:auto;flex:1;';
+            const types = {
+                'keyword': '🏷️ 自定义关键词',
+                'number': '🔢 数字',
+                'english': '🔤 英文',
+                'punctuation': '❗ 标点符号',
+                'quoted': '「」 引号内容',
+                'emoji': '😀 Emoji'
+            };
+            for (const [v, n] of Object.entries(types)) {
+                const opt = document.createElement('option');
+                opt.value = v; opt.textContent = n;
+                select.appendChild(opt);
+            }
+            select.value = rule.type;
+            select.addEventListener('change', () => {
+                rule.type = select.value;
+                if (rule.type === 'number') rule.keywords = ['\\d+(\\.\\d+)?'];
+                else if (rule.type === 'english') rule.keywords = ['[a-zA-Z]+'];
+                else if (rule.type === 'punctuation') rule.keywords = ['[!?！？❤️⭐✨🔥💪…]+'];
+                else if (rule.type === 'quoted') rule.keywords = ['[「」"\'\'][^「」"\'\']*[「」"\'\']'];
+                else if (rule.type === 'emoji') rule.keywords = ['\\p{Emoji_Presentation}|\\p{Extended_Pictographic}'];
+                else rule.keywords = []; // keyword type
+                this._renderAutoColorRules();
+                this._triggerOverlayChange();
+            });
+            header.appendChild(select);
+            
+            const delBtn = document.createElement('button');
+            delBtn.innerHTML = '✕';
+            delBtn.style.cssText = 'background:none;border:none;color:var(--danger,#ff4444);cursor:pointer;margin-left:8px;font-size:12px;';
+            delBtn.addEventListener('click', () => {
+                ov.auto_color_rules.splice(idx, 1);
+                this._renderAutoColorRules();
+                this._triggerOverlayChange();
+            });
+            header.appendChild(delBtn);
+            ruleDiv.appendChild(header);
+
+            // Keywords Input (only for 'keyword' type)
+            if (rule.type === 'keyword') {
+                const kwInput = document.createElement('textarea');
+                kwInput.className = 'rop-textarea';
+                kwInput.rows = 2;
+                kwInput.style.cssText = 'padding:4px;font-size:11px;min-height:40px;max-height:150px;resize:vertical;background:var(--bg-primary,#111116);border:1px solid var(--border-color,#333);color:var(--text-primary,#eee);border-radius:4px;width:100%;box-sizing:border-box;';
+                kwInput.placeholder = '输入或粘贴词语块\n支持换行和逗号分隔 (区分大小写)';
+                // Display keywords joined by newlines for better visibility
+                kwInput.value = (rule.keywords || []).join('\n');
+                kwInput.addEventListener('input', () => {
+                    // Split by newlines, English commas, or Chinese commas
+                    rule.keywords = kwInput.value.split(/[\n,，]+/).map(s => s.trim()).filter(s => s);
+                    this._triggerOverlayChange();
+                });
+                ruleDiv.appendChild(kwInput);
+            }
+
+            // Styles
+            const stylesRow = document.createElement('div');
+            stylesRow.style.cssText = 'display:flex;align-items:center;gap:6px;font-size:11px;';
+            
+            const colorPicker = document.createElement('input');
+            colorPicker.type = 'color';
+            colorPicker.className = 'rop-color';
+            colorPicker.style.cssText = 'width:20px;height:20px;padding:0;';
+            colorPicker.value = rule.color || '#ffffff';
+            colorPicker.addEventListener('input', () => {
+                rule.color = colorPicker.value;
+                this._triggerOverlayChange();
+            });
+            stylesRow.appendChild(document.createTextNode('颜色'));
+            stylesRow.appendChild(colorPicker);
+            
+            const boldCheck = document.createElement('input');
+            boldCheck.type = 'checkbox';
+            boldCheck.checked = !!rule.bold;
+            boldCheck.addEventListener('change', () => {
+                rule.bold = boldCheck.checked;
+                this._triggerOverlayChange();
+            });
+            stylesRow.appendChild(document.createTextNode('粗体'));
+            stylesRow.appendChild(boldCheck);
+
+            ruleDiv.appendChild(stylesRow);
+            container.appendChild(ruleDiv);
+        });
     }
 
     /**
@@ -2999,6 +3222,9 @@ class ReelsOverlayPanel {
                 delete clone.footer_text;
                 if (clone.type === 'text' || clone.type === 'scroll') delete clone.content;
             }
+            // 预设始终存储全程标志，不保留固定时长
+            clone.start = 0;
+            clone.end = 9999;
             return clone;
         });
 
@@ -3045,6 +3271,9 @@ class ReelsOverlayPanel {
             const layerData = layers[i];
             const clone = JSON.parse(JSON.stringify(layerData));
             clone.id = 'ov_' + Date.now() + '_' + Math.random().toString(36).slice(2, 8);
+            // 强制全程：兼容旧预设中存储的固定时长
+            clone.start = 0;
+            clone.end = 9999;
             // For non-fixed layers, preserve text from corresponding old overlay
             if (!clone.fixed_text) {
                 const old = oldOverlays[i];

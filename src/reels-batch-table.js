@@ -517,7 +517,7 @@ function _renderBatchTable() {
                         <button id="rbt-open-media-pool-btn" class="rbt-btn" style="background:${_batchTableState.mediaPoolOpen ? 'rgba(50,70,160,0.6)' : 'rgba(40,60,120,0.6)'}; color:#9bb0ff; border:1px solid rgba(80,120,220,0.3); font-size:11px; padding:2px 8px;">${_batchTableState.mediaPoolOpen ? '收起素材池' : '打开素材池'}</button>
                         <button class="rbt-btn" id="rbt-cycle-fill-btn" style="background:rgba(255,255,255,0.05); color:#ccc; border:1px solid rgba(255,255,255,0.1); padding:2px 8px; font-size:11px;" title="打开素材循环填充面板">素材使用设置</button>
                         <span style="color:rgba(255,255,255,0.2);margin:0 2px;">|</span>
-                        <button class="rbt-btn" id="rbt-paste-txtcontent" style="padding:2px 8px;font-size:11px;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);color:#ccc;" title="从剪贴板粘贴到人声字幕列">粘贴人声对齐字幕</button>
+                        <button class="rbt-btn" id="rbt-paste-txtcontent" style="padding:2px 8px;font-size:11px;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);color:#ccc;" title="从剪贴板粘贴到人声字幕列">人声对齐字幕（断行后）</button>
                         <button class="rbt-btn" id="rbt-paste-btn" style="padding:2px 8px;font-size:11px;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);color:#ccc;" title="从 Google 表格粘贴覆层文案(支持标题/内容/结尾多列格式)">粘贴覆层文案</button>
                         <button class="rbt-btn" id="rbt-paste-scroll-btn" style="padding:2px 8px;font-size:11px;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);color:#ccc;" title="从 Google 表格批量粘贴滚动字幕">粘贴滚动字幕</button>
                         <button class="rbt-btn" id="rbt-paste-clip-ab" style="padding:2px 8px;font-size:11px;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);color:#ccc;" title="A/B双版文案">粘贴剪辑文案 (A/B版)</button>
@@ -548,8 +548,9 @@ function _renderBatchTable() {
                             <option value="eleven_multilingual_v2">Eleven Multilingual v2</option>
                             <option value="eleven_monolingual_v1">Eleven Monolingual v1</option>
                         </select>
-                        <span style="font-size:11px;color:#888;">配音底色:</span>
-                        <select id="rbt-tts-default-voice" class="rbt-select" style="width:110px;height:24px;font-size:11px;padding:0 4px;background:rgba(0,0,0,0.3);border:1px solid rgba(255,255,255,0.1);color:#ccc;"><option value="">-- 选择默认音色 --</option></select>
+                        <span style="font-size:11px;color:#888;">配音音色:</span>
+                        <input list="rbt-tts-voices-list" id="rbt-tts-default-voice" class="rbt-select" style="width:110px;height:24px;font-size:11px;padding:0 4px;background:rgba(0,0,0,0.3);border:1px solid rgba(255,255,255,0.1);color:#ccc;" placeholder="输入或选择音色ID" />
+                        <datalist id="rbt-tts-voices-list"></datalist>
                         <button class="rbt-btn" id="rbt-refresh-voices-btn" style="padding:2px 8px;font-size:11px;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);color:#ccc;" title="刷新列表">刷新</button>
                         <button class="rbt-btn" id="rbt-apply-voice-all-btn" style="padding:2px 8px;font-size:11px;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);color:#ccc;" title="应用全部空行">应用全部</button>
                         <span style="color:rgba(255,255,255,0.2);margin:0 2px;">|</span>
@@ -650,6 +651,7 @@ function _renderBatchTable() {
                             <th class="rbt-col-tpl">字幕模板</th>
                             <th class="rbt-col-tpl">覆层预设</th>
                             <th class="rbt-col-dur">时长(s)</th>
+                            <th class="rbt-col-exportname"><div class="rbt-th-wrap"><span>导出命名</span><button class="rbt-th-paste" data-paste-col="exportName" title="从剪贴板粘贴到该列">📋</button><button class="rbt-th-clear" data-clear-col="exportName" title="清空该列">清</button></div></th>
 
                             <!-- 🌟 视频封面层 (Gold) -->
                             <th class="rbt-col-cover-media rbt-grp-cover"><div class="rbt-th-wrap"><span>封面素材</span><button class="rbt-th-folder" data-folder-col="cover_media" title="选择文件夹批量分配">📁</button><button class="rbt-th-clear" data-clear-col="cover_media" title="清空该列">清</button></div></th>
@@ -658,26 +660,26 @@ function _renderBatchTable() {
                             <!-- 🟦 画面基础层 (Blue) -->
                             <th class="rbt-col-hook rbt-grp-video"><div class="rbt-th-wrap"><span>前置Hook</span><button class="rbt-th-clear" data-clear-col="hook" title="清空该列">清</button></div></th>
                             <th class="rbt-col-bg rbt-grp-video"><div class="rbt-th-wrap"><span>背景素材</span><button class="rbt-th-folder" data-folder-col="bg" title="选择文件夹批量分配">📁</button><button class="rbt-th-clear" data-clear-col="bg" title="清空该列">清</button></div></th>
-                            <th class="rbt-col-bgscale rbt-grp-video">背景缩放</th>
-                            <th class="rbt-col-bgdurscale rbt-grp-video">背景时长</th>
+                            <th class="rbt-col-bgscale rbt-grp-video"><div class="rbt-th-wrap"><span>背景缩放</span><button class="rbt-th-clear" data-clear-col="bgScale" title="清空该列">清</button></div></th>
+                            <th class="rbt-col-bgdurscale rbt-grp-video"><div class="rbt-th-wrap"><span>背景时长</span><button class="rbt-th-clear" data-clear-col="bgDurScale" title="清空该列">清</button></div></th>
 
                             <!-- 🎬 视频覆层 (Cyan) -->
                             <th class="rbt-col-contentvideo rbt-grp-cv"><div class="rbt-th-wrap"><span>内容视频</span><button class="rbt-th-folder" data-folder-col="contentvideo" title="选择文件夹批量分配">📁</button><button class="rbt-th-clear" data-clear-col="contentvideo" title="清空该列">清</button></div></th>
-                            <th class="rbt-col-cvtrim rbt-grp-cv">✂️ 裁切</th>
-                            <th class="rbt-col-cvscale rbt-grp-cv">视频缩放</th>
-                            <th class="rbt-col-cvpos rbt-grp-cv">视频位置</th>
-                            <th class="rbt-col-cvvol rbt-grp-cv">🔊 覆层音量</th>
+                            <th class="rbt-col-cvtrim rbt-grp-cv"><div class="rbt-th-wrap"><span>✂️ 裁切</span><button class="rbt-th-clear" data-clear-col="cvTrim" title="清空该列">清</button></div></th>
+                            <th class="rbt-col-cvscale rbt-grp-cv"><div class="rbt-th-wrap"><span>视频缩放</span><button class="rbt-th-clear" data-clear-col="cvScale" title="清空该列">清</button></div></th>
+                            <th class="rbt-col-cvpos rbt-grp-cv"><div class="rbt-th-wrap"><span>视频位置</span><button class="rbt-th-clear" data-clear-col="cvPos" title="清空该列">清</button></div></th>
+                            <th class="rbt-col-cvvol rbt-grp-cv"><div class="rbt-th-wrap"><span>🔊 覆层音量</span><button class="rbt-th-clear" data-clear-col="cvVol" title="清空该列">清</button></div></th>
 
                             <th class="rbt-col-bgm rbt-grp-video"><div class="rbt-th-wrap"><span>配乐</span><button class="rbt-th-folder" data-folder-col="bgm" title="选择文件夹批量分配">📁</button><button class="rbt-th-clear" data-clear-col="bgm" title="清空该列">清</button></div></th>
 
                             <!-- 🟪 人声与音频层 (Purple) -->
                             <th class="rbt-col-ai_script rbt-grp-audio"><div class="rbt-th-wrap"><span>AI 原文案</span><button class="rbt-th-paste" data-paste-col="aiScript" title="从剪贴板粘贴到该列">📋</button><button class="rbt-th-clear" data-clear-col="ai_script" title="清空该列">清</button></div></th>
                             <th class="rbt-col-tts_text rbt-grp-audio"><div class="rbt-th-wrap"><span>TTS文案</span><button class="rbt-th-paste" data-paste-col="ttsText" title="从剪贴板粘贴到该列">📋</button><button class="rbt-th-clear" data-clear-col="tts_text" title="清空该列">清</button></div></th>
-                            <th class="rbt-col-tts_voice rbt-grp-audio"><div class="rbt-th-wrap"><span>TTS音色</span><button class="rbt-th-paste" data-paste-col="ttsVoiceId" title="从剪贴板粘贴到该列">📋</button></div></th>
+                            <th class="rbt-col-tts_voice rbt-grp-audio"><div class="rbt-th-wrap"><span>TTS音色</span><button class="rbt-th-paste" data-paste-col="ttsVoiceId" title="从剪贴板粘贴到该列">📋</button><button class="rbt-th-clear" data-clear-col="tts_voice" title="清空该列">清</button></div></th>
                             <th class="rbt-col-srt rbt-grp-audio"><div class="rbt-th-wrap"><span>字幕SRT</span><button class="rbt-th-folder" data-folder-col="srt" title="选择文件夹批量分配">📁</button><button class="rbt-th-clear" data-clear-col="srt" title="清空该列">清</button></div></th>
-                            <th class="rbt-col-txtcontent rbt-grp-audio"><div class="rbt-th-wrap"><span>粘贴人声对齐字幕</span><button class="rbt-th-paste" data-paste-col="txtContent" title="从剪贴板粘贴到该列">📋</button><button class="rbt-th-clear" data-clear-col="txt" title="清空该列">清</button></div></th>
+                            <th class="rbt-col-txtcontent rbt-grp-audio"><div class="rbt-th-wrap"><span>人声对齐字幕（断行后）</span><button class="rbt-th-paste" data-paste-col="txtContent" title="从剪贴板粘贴到该列">📋</button><button class="rbt-th-clear" data-clear-col="txt" title="清空该列">清</button></div></th>
                             <th class="rbt-col-audio rbt-grp-audio"><div class="rbt-th-wrap"><span>人声音频层</span><button class="rbt-th-folder" data-folder-col="audio" title="选择文件夹批量分配">📁</button><button class="rbt-th-clear" data-clear-col="audio" title="清空该列">清</button></div></th>
-                            <th class="rbt-col-audiodurscale rbt-grp-audio">人声变速</th>
+                            <th class="rbt-col-audiodurscale rbt-grp-audio"><div class="rbt-th-wrap"><span>人声变速</span><button class="rbt-th-clear" data-clear-col="audioDurScale" title="清空该列">清</button></div></th>
 
                             <!-- 🟧 覆层 (Amber) -->
                             <th class="rbt-col-pip rbt-grp-ovl"><div class="rbt-th-wrap"><span>图像覆层</span><button class="rbt-th-folder" data-folder-col="pip" title="选择文件夹批量分配">📁</button><button class="rbt-th-clear" data-clear-col="pip" title="清空该列">清</button></div></th>
@@ -1055,6 +1057,10 @@ function _renderBatchRow(task, idx, subtitlePresets, cardTemplates) {
                 <input type="number" class="rbt-textarea rbt-dur-input" data-idx="${idx}" min="0" max="600" step="0.5"
                     value="${task.customDuration ? task.customDuration : ''}" placeholder="自动" style="width:55px;text-align:center;" title="留空=自动跟随音频/视频时长，输入数字=自定义秒数">
             </td>
+            <td class="rbt-col-exportname">
+                <input type="text" class="rbt-textarea rbt-exportname-input" data-idx="${idx}" 
+                    value="${_escHtml(task.exportName || '')}" placeholder="自动提取文案前50字" style="width:100px;font-size:11px;" title="留空则默认使用文案的前50个字符作为导出名字">
+            </td>
             <td class="rbt-col-cover-media rbt-droppable" data-field="cover_media">
                 <div style="display:flex;align-items:center;gap:2px;">
                     <div style="flex:1;min-width:0;overflow:hidden;">${coverContent}</div>
@@ -1331,6 +1337,7 @@ function _bindBatchTableEvents() {
 
     // ── Language searchable picker ──
     _initLangPicker(container);
+
 
     // ══ Tab bar events ══
     const tabBar = container.querySelector('.rbt-tabs-scroll');
@@ -2017,12 +2024,13 @@ function _bindBatchTableEvents() {
         await new Promise(resolve => setTimeout(resolve, 500));
         
         // Step 3: Run Subtitle Alignment (only if there are tasks with txtContent + audio)
-        const tasksWithTextAndAudio = (window._reelsState?.tasks || []).filter(t => 
-            (t.txtContent && t.txtContent.trim()) && t.audioPath && !t.aligned
-        );
+        const tasksWithTextAndAudio = targetIdxs.filter(idx => {
+            const t = tasks[idx];
+            return (t.txtContent && t.txtContent.trim()) && t.audioPath;
+        });
         if (tasksWithTextAndAudio.length > 0) {
             showToast(`🚀 全家桶 Step 3/3：字幕对齐中 (${tasksWithTextAndAudio.length} 行)...`, 'info');
-            await _batchAlignAllTasks();
+            await _batchAlignAllTasks(true); // 强制使用专业对齐重新执行
             showToast('🎉 全家桶三步流水线全部完成！', 'success', 5000);
         } else {
             showToast('✅ 全家桶完成（AI + 配音）。无人声字幕，跳过对齐步骤。', 'success', 5000);
@@ -4343,6 +4351,14 @@ function _applyBatchTableChanges() {
         task.customDuration = v > 0 ? v : 0;
     });
 
+    // 导出命名
+    container.querySelectorAll('.rbt-exportname-input').forEach(el => {
+        const idx = parseInt(el.dataset.idx);
+        const task = state.tasks[idx];
+        if (!task) return;
+        task.exportName = el.value.trim();
+    });
+
     // 背景缩放
     container.querySelectorAll('.rbt-bgscale-input').forEach(el => {
         const idx = parseInt(el.dataset.idx);
@@ -4749,30 +4765,33 @@ async function _batchPasteScrollFromSheet() {
 // ═══════════════════════════════════════════════════════
 
 const _RBT_COLUMNS = [
-    { key: 'hook', label: '🪝 钩子视频', default: true },
+    { key: 'exportname', label: '📝 导出命名', default: true },
+    { key: 'cover-media', label: '🌟 封面素材', default: true },
+    { key: 'cover-text', label: '🌟 封面文案', default: true },
+    { key: 'hook', label: '🪝 前置Hook', default: true },
     { key: 'bg', label: '🖼 背景素材', default: true },
     { key: 'bgscale', label: '🔍 背景缩放', default: true },
-    { key: 'bgdurscale', label: '⏱️ 背景延展', default: true },
-    { key: 'contentvideo', label: '🎬 视频覆层', default: true },
-    { key: 'cvtrim', label: '✂️ 裁切区间', default: true },
+    { key: 'bgdurscale', label: '⏱️ 背景时长', default: true },
+    { key: 'contentvideo', label: '🎬 内容视频', default: true },
+    { key: 'cvtrim', label: '✂️ 裁切', default: true },
     { key: 'cvscale', label: '🔍 视频缩放', default: true },
     { key: 'cvpos', label: '📐 视频位置', default: true },
     { key: 'cvvol', label: '🔊 覆层音量', default: true },
-    { key: 'pip', label: '🖼️ 图片覆层', default: true },
+    { key: 'pip', label: '🖼️ 图像覆层', default: true },
     { key: 'tts_text', label: '🤖 TTS文案', default: true },
     { key: 'tts_voice', label: '🗣 TTS音色', default: true },
-    { key: 'audio', label: '🎙 人声配音', default: true },
-    { key: 'audiodurscale', label: '⏱️ 音频缩放', default: true },
+    { key: 'audio', label: '🎙 人声音频层', default: true },
+    { key: 'audiodurscale', label: '⏱️ 人声变速', default: true },
     { key: 'ai_script', label: '🧠 AI 原文案', default: true },
-    { key: 'bgm', label: '🎵 全局配乐', default: true },
-    { key: 'srt', label: '📝 SRT字幕', default: true },
-    { key: 'txtcontent', label: '📃 人声字幕', default: true },
-    { key: 'title', label: '📌 覆层-Title', default: true },
-    { key: 'body', label: '📌 覆层-Body', default: true },
-    { key: 'footer', label: '📌 覆层-Footer', default: true },
-    { key: 'scroll-title', label: '📜 滚动-Title', default: true },
-    { key: 'scroll-body', label: '📜 滚动-Body', default: true },
-    { key: 'dur', label: '⏱️ 预估时长', default: true },
+    { key: 'bgm', label: '🎵 配乐', default: true },
+    { key: 'srt', label: '📝 字幕SRT', default: true },
+    { key: 'txtcontent', label: '📃 人声对齐字幕（断行后）', default: true },
+    { key: 'title', label: '📌 覆层标题', default: true },
+    { key: 'body', label: '📌 覆层内容', default: true },
+    { key: 'footer', label: '📌 覆层结尾', default: true },
+    { key: 'scroll-title', label: '📜 滚动标题', default: true },
+    { key: 'scroll-body', label: '📜 滚动内容', default: true },
+    { key: 'dur', label: '⏱️ 时长(s)', default: true },
     { key: 'tpl', label: '🎬 字幕模板+覆层预设', default: true },
 ];
 
@@ -4784,7 +4803,7 @@ function _getColVisStorageKey() {
 function _getColVisibility() {
     const key = _getColVisStorageKey();
     // 一次性迁移：将旧存储的列设置重置为全显示（版本号升级触发）
-    const RESET_VERSION = 'v2-all-visible';
+    const RESET_VERSION = 'v3-add-cover-export';
     const resetKey = key + '-reset-version';
     if (localStorage.getItem(resetKey) !== RESET_VERSION) {
         localStorage.removeItem(key);
@@ -4868,6 +4887,7 @@ function _buildPresetStyledItemHTML(name, presetsMap) {
         const bgC = m.color_bg || m.bg_color || '#000000';
         const useBg = m.use_box || m.bg_enabled || false;
         const bgR = Math.round((m.box_radius || m.bg_radius || 8) * 0.4);
+        
         let ts = 'none';
         if (useStk && bw > 0) {
             const s = Math.max(1, Math.round(bw * 0.5));
@@ -4877,6 +4897,7 @@ function _buildPresetStyledItemHTML(name, presetsMap) {
             const extra = `2px 2px ${m.shadow_blur}px ${m.color_shadow || '#000'}`;
             ts = ts === 'none' ? extra : ts + ', ' + extra;
         }
+        
         let bgCss = '';
         if (useBg) {
             const bgGradCols = m.bg_gradient_colors || [];
@@ -4885,17 +4906,53 @@ function _buildPresetStyledItemHTML(name, presetsMap) {
             } else {
                 bgCss = `background:${bgC};`;
             }
-            bgCss += `border-radius:${bgR}px;padding:2px 8px;`;
+            // Fix text alignment: apply negative left margin to offset the left padding
+            bgCss += `border-radius:${bgR}px;padding:2px 8px;margin-left:-8px;`;
         }
+        
         const fw = m.bold || m.font_weight >= 700 ? 'bold' : 'normal';
+        const fsStyle = m.italic ? 'font-style:italic;' : '';
+        const ffStyle = m.font_family ? `font-family:"${m.font_family}",sans-serif;` : '';
+        const ttStyle = m.text_transform ? `text-transform:${m.text_transform};` : '';
+        const lsStyle = m.letter_spacing ? `letter-spacing:${m.letter_spacing}px;` : '';
+        
         const eName = _escHtml(name);
-        return `<div class="rbt-sub-styled-item" data-val="${eName}" style="padding:5px 10px;cursor:pointer;border-bottom:1px solid #2a2a3e;">
-            <span style="font-size:15px;font-weight:${fw};line-height:1.5;${bgCss}display:inline-block;">
-                <span style="color:${tc};text-shadow:${ts};">${eName}</span>
+        
+        // Accurate Preview for Karaoke/Dynamic Box
+        let htmlName = '';
+        if (m.karaoke_highlight || m.dynamic_box) {
+            let splitIdx = eName.lastIndexOf('_');
+            if (splitIdx === -1) splitIdx = eName.lastIndexOf('+');
+            if (splitIdx === -1) splitIdx = eName.lastIndexOf('-');
+            
+            let part1, part2;
+            if (splitIdx !== -1 && splitIdx < eName.length - 1) {
+                part1 = eName.substring(0, splitIdx + 1); // includes delimiter
+                part2 = eName.substring(splitIdx + 1);
+            } else {
+                const len = eName.length;
+                part1 = eName.substring(0, Math.max(0, len - 3));
+                part2 = eName.substring(Math.max(0, len - 3));
+            }
+            
+            let highStyle = `color:${m.color_high || tc};`;
+            if (m.dynamic_box) {
+                const dynBg = m.color_high_bg || '#FFD700';
+                const dynR = Math.round((m.dynamic_radius || 6) * 0.4);
+                highStyle += `background:${dynBg};border-radius:${dynR}px;padding:1px 4px;margin:0 1px;`;
+            }
+            htmlName = `<span style="color:${tc};text-shadow:${ts};">${part1}</span><span style="${highStyle}text-shadow:${ts};">${part2}</span>`;
+        } else {
+            htmlName = `<span style="color:${tc};text-shadow:${ts};">${eName}</span>`;
+        }
+
+        return `<div class="rbt-sub-styled-item" data-val="${eName}" style="padding:5px 18px;cursor:pointer;border-bottom:1px solid #2a2a3e;">
+            <span style="font-size:15px;font-weight:${fw};line-height:1.5;${bgCss}${fsStyle}${ffStyle}${ttStyle}${lsStyle}display:inline-block;">
+                ${htmlName}
             </span>
         </div>`;
     } catch(e) {
-        return `<div class="rbt-sub-styled-item" data-val="${_escHtml(name)}" style="padding:5px 10px;cursor:pointer;border-bottom:1px solid #2a2a3e;color:#ccc;font-size:13px;">${_escHtml(name)}</div>`;
+        return `<div class="rbt-sub-styled-item" data-val="${_escHtml(name)}" style="padding:5px 18px;cursor:pointer;border-bottom:1px solid #2a2a3e;color:#ccc;font-size:13px;">${_escHtml(name)}</div>`;
     }
 }
 
@@ -4913,10 +4970,18 @@ function _openStyledPresetPicker(anchorEl, currentVal, onSelect) {
 
     let presetsMap = {};
     let names = [];
+    let categorized = [];
     try {
-        const data = window.ReelsStyleEngine ? ReelsStyleEngine.loadSubtitlePresets() : { presets: {} };
-        presetsMap = data.presets || {};
-        names = Object.keys(presetsMap);
+        if (window.ReelsStyleEngine && ReelsStyleEngine.getPresetsByCategory) {
+            const catData = ReelsStyleEngine.getPresetsByCategory();
+            presetsMap = catData.presetsMap || {};
+            categorized = catData.categorized || [];
+            names = Object.keys(presetsMap);
+        } else {
+            const data = window.ReelsStyleEngine ? ReelsStyleEngine.loadSubtitlePresets() : { presets: {} };
+            presetsMap = data.presets || {};
+            names = Object.keys(presetsMap);
+        }
     } catch(e) { }
 
     if (names.length === 0) {
@@ -4967,12 +5032,25 @@ function _openStyledPresetPicker(anchorEl, currentVal, onSelect) {
         </div>
     `;
 
-    // 列表区
-    const listHtml = `
-        <div id="rbt-ssp-list" style="padding-bottom:8px;">
-            ${names.map(n => _buildPresetStyledItemHTML(n, presetsMap)).join('')}
-        </div>
-    `;
+    // 列表区 — 按分类折叠
+    let listHtml = '<div id="rbt-ssp-list" style="padding-bottom:8px;">';
+    if (categorized.length > 0) {
+        for (const group of categorized) {
+            const isUserPresets = group.category.includes('我的预设');
+            listHtml += `<details class="rbt-ssp-category" ${isUserPresets ? 'open' : 'open'} style="margin:0;">
+                <summary style="cursor:pointer;padding:8px 14px;font-size:12px;font-weight:700;color:#8af;background:rgba(74,158,255,0.05);border-bottom:1px solid #2a2a3e;user-select:none;position:sticky;top:0;z-index:5;">
+                    ${_escHtml(group.category)} <span style="font-size:10px;color:#666;font-weight:400;">(${group.names.length})</span>
+                </summary>
+                <div class="rbt-ssp-cat-items">
+                    ${group.names.map(n => _buildPresetStyledItemHTML(n, presetsMap)).join('')}
+                </div>
+            </details>`;
+        }
+    } else {
+        // Fallback: flat list
+        listHtml += names.map(n => _buildPresetStyledItemHTML(n, presetsMap)).join('');
+    }
+    listHtml += '</div>';
 
     popup.innerHTML = searchHtml + defaultHtml + listHtml;
     document.body.appendChild(popup);
@@ -4989,28 +5067,57 @@ function _openStyledPresetPicker(anchorEl, currentVal, onSelect) {
     const searchInput = popup.querySelector('#rbt-ssp-search');
     const listContainer = popup.querySelector('#rbt-ssp-list');
 
-    // 搜索高亮逻辑
+    // 搜索逻辑（支持分类折叠）
     setTimeout(() => searchInput.focus(), 30);
     searchInput.addEventListener('input', () => {
         const q = searchInput.value.toLowerCase();
-        Array.from(listContainer.children).forEach(el => {
-            const val = el.dataset.val.toLowerCase();
+        // Filter items
+        listContainer.querySelectorAll('.rbt-sub-styled-item').forEach(el => {
+            const val = (el.dataset.val || '').toLowerCase();
             el.style.display = val.includes(q) ? 'block' : 'none';
+        });
+        // Show/hide empty categories
+        listContainer.querySelectorAll('.rbt-ssp-category').forEach(details => {
+            const items = details.querySelectorAll('.rbt-sub-styled-item');
+            const hasVisible = Array.from(items).some(el => el.style.display !== 'none');
+            details.style.display = hasVisible ? 'block' : 'none';
+            if (q && hasVisible) details.open = true;
         });
     });
 
-    // 点击项 → 选中 + 回调 并关闭
+    // 点击项 → 应用预设但不关闭（方便快速切换对比）
+    let _activeItem = null;
     popup.querySelectorAll('.rbt-sub-styled-item').forEach(item => {
         item.addEventListener('click', () => {
             const val = item.dataset.val;
+            // 更新选中高亮
+            if (_activeItem) {
+                _activeItem.style.background = 'transparent';
+                _activeItem.style.borderLeft = '';
+            }
+            item.style.background = 'rgba(74,158,255,0.15)';
+            item.style.borderLeft = '3px solid #4a9eff';
+            _activeItem = item;
             if (onSelect) onSelect(val);
+        });
+        item.addEventListener('mouseenter', () => {
+            if (item !== _activeItem) item.style.background = 'rgba(74,158,255,0.1)';
+        });
+        item.addEventListener('mouseleave', () => {
+            if (item !== _activeItem) item.style.background = 'transparent';
+        });
+    });
+
+    // 鼠标移开弹窗后延迟关闭
+    let _closeTimer = null;
+    popup.addEventListener('mouseleave', () => {
+        _closeTimer = setTimeout(() => {
             popup.remove();
             document.removeEventListener('mousedown', outsideHandler);
-        });
-        item.addEventListener('mouseenter', () => { item.style.background = 'rgba(74,158,255,0.1)'; });
-        item.addEventListener('mouseleave', () => { 
-            item.style.background = item.dataset.val === currentVal ? 'rgba(74,158,255,0.15)' : 'transparent'; 
-        });
+        }, 600);
+    });
+    popup.addEventListener('mouseenter', () => {
+        if (_closeTimer) { clearTimeout(_closeTimer); _closeTimer = null; }
     });
 
     // 点击外部关闭
@@ -5043,47 +5150,58 @@ function _showColumnSettingsPopup(anchor) {
     // ── 预设方案定义 ──
     const presets = [
         {
-            name: '🤖 AI 全自动制作',
-            desc: '完整展示AI文案流水线',
-            cols: ['bg','bgscale','ai_script','tts_text','tts_voice','audio','audiodurscale','bgm','srt','txtcontent','dur','tpl']
+            name: '🎥 HeyGen匹配字幕',
+            desc: '背景视频 + 根据背景素材声音对齐字幕',
+            cols: ['bg','bgscale','bgdurscale','srt','txtcontent','dur','tpl','exportname']
         },
         {
-            name: '🎬 完整模式',
-            desc: '显示所有列',
-            cols: ['hook','bg','bgscale','bgdurscale','contentvideo','cvtrim','cvscale','cvpos','cvvol','pip','tts_text','tts_voice','audio','audiodurscale','ai_script','bgm','srt','txtcontent','title','body','footer','scroll-title','scroll-body','dur','tpl']
+            name: '🎨 无字幕动画Reels',
+            desc: '背景素材 + 覆层(标题/内容/结尾) + 图像覆层 + 配乐',
+            cols: ['bg','bgscale','bgdurscale','bgm','title','body','footer','dur','tpl','exportname']
         },
         {
-            name: '📝 动态字幕',
-            desc: '原版字幕配置 (无AI配音)',
-            cols: ['bg','bgscale','audio','audiodurscale','bgm','srt','txtcontent','dur','tpl']
+            name: '📝 动态字幕(手动)',
+            desc: '背景素材 + 手动提供人声音频/SRT/对齐字幕 + 配乐',
+            cols: ['bg','bgscale','bgdurscale','audio','audiodurscale','bgm','srt','txtcontent','dur','tpl','exportname']
         },
         {
-            name: '📋 覆层文案',
-            desc: '无配音的纯净覆层配置',
-            cols: ['bg','bgscale','bgm','title','body','footer','dur','tpl']
+            name: '🤖 动态字幕(AI自动)',
+            desc: '背景素材 + AI文案→TTS→字幕 全自动流水线 + 配乐',
+            cols: ['bg','bgscale','bgdurscale','ai_script','tts_text','tts_voice','audio','audiodurscale','bgm','srt','txtcontent','dur','tpl','exportname']
         },
         {
-            name: '🔄 滚动字幕',
-            desc: '无配音的滚动字幕配置',
-            cols: ['bg','bgscale','audio','audiodurscale','bgm','scroll-title','scroll-body','dur','tpl']
+            name: '🔄 滚动字幕(手动)',
+            desc: '背景素材 + 手动提供人声音频 + 滚动标题/内容 + 配乐',
+            cols: ['bg','bgscale','bgdurscale','audio','audiodurscale','bgm','scroll-title','scroll-body','dur','tpl','exportname']
         },
         {
-            name: '✂️ 剪辑+覆层合成',
-            desc: '背景+内容视频(裁切)+覆层文案 A/B双版',
-            cols: ['bg','bgscale','contentvideo','cvtrim','cvscale','cvpos','cvvol','bgm','title','body','footer','dur','tpl']
+            name: '🔄 滚动字幕(AI自动)',
+            desc: '背景素材 + AI文案→TTS→人声 + 滚动标题/内容 + 配乐',
+            cols: ['bg','bgscale','bgdurscale','ai_script','tts_text','tts_voice','audio','audiodurscale','bgm','scroll-title','scroll-body','dur','tpl','exportname']
+        },
+        {
+            name: '✂️ 达芬奇剪辑',
+            desc: '背景 + 内容视频(裁切/缩放/位置/音量) + 覆层文案 + 配乐',
+            cols: ['bg','bgscale','bgdurscale','contentvideo','cvtrim','cvscale','cvpos','cvvol','bgm','title','body','footer','dur','tpl','exportname']
+        },
+        {
+            name: '🎙 加Hook版口播',
+            desc: 'Hook + 封面 + 背景 + 全套人声/字幕 + 配乐',
+            cols: ['hook','cover-media','cover-text','bg','bgscale','bgdurscale','ai_script','tts_text','tts_voice','audio','audiodurscale','bgm','srt','txtcontent','dur','tpl','exportname']
         }
     ];
 
     // ── 列分类 ──
     const colGroups = [
+        { label: '封面', keys: ['cover-media','cover-text'] },
         { label: '素材 & 背景', keys: ['hook','bg','bgscale','bgdurscale','pip'] },
-        { label: '🎬 视频覆层', keys: ['contentvideo','cvtrim','cvscale','cvpos','cvvol'] },
+        { label: '🎬 内容视频', keys: ['contentvideo','cvtrim','cvscale','cvpos','cvvol'] },
         { label: 'AI 配音与文案', keys: ['ai_script','tts_text','tts_voice'] },
         { label: '音频', keys: ['audio','audiodurscale','bgm'] },
         { label: '字幕 & 文本', keys: ['srt','txtcontent'] },
         { label: '覆层文案', keys: ['title','body','footer'] },
         { label: '滚动字幕', keys: ['scroll-title','scroll-body'] },
-        { label: '其他', keys: ['dur','tpl'] },
+        { label: '其他', keys: ['dur','tpl','exportname'] },
     ];
 
     // Build column label map
@@ -5228,15 +5346,46 @@ function _showColumnSettingsPopup(anchor) {
     // ── 自定义预设事件 ──
     // 保存当前配置
     popup.querySelector('#rbt-col-save-preset')?.addEventListener('click', () => {
-        const name = prompt('请输入预设名称:');
-        if (!name || !name.trim()) return;
-        const cp = _loadCustomPresets();
-        const enabledCols = _RBT_COLUMNS.filter(c => vis[c.key]).map(c => c.key);
-        cp[name.trim()] = enabledCols;
-        _saveCustomPresets(cp);
-        popup.remove();
-        _showColumnSettingsPopup(document.querySelector('[data-action="col-settings"]') || document.body);
-        if (typeof showToast === 'function') showToast(`✅ 预设 "${name.trim()}" 已保存`, 'success');
+        const overlay = document.createElement('div');
+        overlay.style.cssText = 'position:absolute;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.8);display:flex;align-items:center;justify-content:center;z-index:9999;border-radius:12px;';
+        overlay.innerHTML = `
+            <div style="background:#2d2d2d;padding:15px;border-radius:8px;border:1px solid #444;width:80%;max-width:300px;">
+                <div style="color:#eee;font-size:13px;margin-bottom:8px;">请输入预设名称：</div>
+                <input type="text" id="_col-preset-input" style="width:100%;box-sizing:border-box;background:#111;color:#fff;border:1px solid #555;padding:6px;border-radius:4px;outline:none;margin-bottom:12px;" />
+                <div style="display:flex;justify-content:flex-end;gap:8px;">
+                    <button id="_col-preset-cancel" style="padding:4px 10px;background:#444;color:#eee;border:none;border-radius:4px;cursor:pointer;font-size:12px;">取消</button>
+                    <button id="_col-preset-confirm" style="padding:4px 10px;background:#4a9eff;color:#fff;border:none;border-radius:4px;cursor:pointer;font-size:12px;">保存</button>
+                </div>
+            </div>
+        `;
+        popup.appendChild(overlay);
+        const input = overlay.querySelector('#_col-preset-input');
+        input.focus();
+
+        const closePrompt = () => overlay.remove();
+        
+        const confirmSave = () => {
+            const name = input.value;
+            if (!name || !name.trim()) {
+                closePrompt();
+                return;
+            }
+            const cp = _loadCustomPresets();
+            const enabledCols = _RBT_COLUMNS.filter(c => vis[c.key]).map(c => c.key);
+            cp[name.trim()] = enabledCols;
+            _saveCustomPresets(cp);
+            closePrompt();
+            popup.remove();
+            _showColumnSettingsPopup(document.querySelector('[data-action="col-settings"]') || document.body);
+            if (typeof showToast === 'function') showToast(`✅ 预设 "${name.trim()}" 已保存`, 'success');
+        };
+
+        overlay.querySelector('#_col-preset-cancel').onclick = closePrompt;
+        overlay.querySelector('#_col-preset-confirm').onclick = confirmSave;
+        input.onkeydown = (e) => { 
+            if (e.key === 'Enter') confirmSave(); 
+            if (e.key === 'Escape') closePrompt(); 
+        };
     });
 
     // 加载自定义预设
@@ -6727,18 +6876,18 @@ function _batchAddEmptyRow() {
 let _rbtVoiceCache = null;
 
 async function _rbtLoadVoiceList() {
-    const select = document.getElementById('rbt-tts-default-voice');
-    if (!select) return;
+    const inputEl = document.getElementById('rbt-tts-default-voice');
+    if (!inputEl) return;
     
     // 记录当前选择
-    const prevValue = select.value || localStorage.getItem('rbt_tts_voice') || '';
+    const prevValue = inputEl.value || localStorage.getItem('rbt_tts_voice') || '';
     
-    select.innerHTML = '<option value="">加载中...</option>';
+    inputEl.placeholder = '加载中...';
     
     try {
         // 如果有缓存，先用缓存
         if (_rbtVoiceCache && _rbtVoiceCache.length > 0) {
-            _populateVoiceSelect(select, _rbtVoiceCache, prevValue);
+            _populateVoiceSelect(inputEl, _rbtVoiceCache, prevValue);
             return;
         }
         
@@ -6751,33 +6900,40 @@ async function _rbtLoadVoiceList() {
         
         if (data.voices && data.voices.length > 0) {
             _rbtVoiceCache = data.voices;
-            _populateVoiceSelect(select, data.voices, prevValue);
+            _populateVoiceSelect(inputEl, data.voices, prevValue);
+            inputEl.placeholder = '输入或选择音色ID';
         } else {
-            select.innerHTML = '<option value="">无可用音色 (请配置API Key)</option>';
+            inputEl.placeholder = '无可用音色';
         }
     } catch (err) {
         console.warn('[RBT] 加载音色列表失败:', err.message);
-        select.innerHTML = '<option value="">加载失败</option>';
+        inputEl.placeholder = '加载失败';
     }
 }
 
-function _populateVoiceSelect(select, voices, prevValue) {
-    select.innerHTML = '<option value="">-- 选择默认音色 --</option>';
+function _populateVoiceSelect(inputEl, voices, prevValue) {
+    let datalist = document.getElementById('rbt-tts-voices-list');
+    if (!datalist) {
+        datalist = document.createElement('datalist');
+        datalist.id = 'rbt-tts-voices-list';
+        inputEl.parentNode.insertBefore(datalist, inputEl.nextSibling);
+    }
+    datalist.innerHTML = '';
     for (const v of voices) {
         const opt = document.createElement('option');
         opt.value = v.voice_id;
         opt.textContent = `${v.name}`;
-        if (v.voice_id === prevValue) opt.selected = true;
-        select.appendChild(opt);
+        datalist.appendChild(opt);
     }
+    
     // 持久化选择
-    select.addEventListener('change', () => {
-        localStorage.setItem('rbt_tts_voice', select.value);
-    }, { once: false });
+    inputEl.addEventListener('change', () => {
+        localStorage.setItem('rbt_tts_voice', inputEl.value.trim());
+    });
     
     // 恢复上次选择
-    if (prevValue && select.value !== prevValue) {
-        select.value = prevValue;
+    if (prevValue && inputEl.value !== prevValue) {
+        inputEl.value = prevValue;
     }
 }
 
@@ -7976,7 +8132,7 @@ function _rbtSmartLineBreak(text, customMaxChars) {
 // 10. Batch Alignment (对齐字幕)
 // ═══════════════════════════════════════════════════════
 
-async function _batchAlignAllTasks() {
+async function _batchAlignAllTasks(overrideForce = false) {
     // 先同步表格输入到 task
     _applyBatchTableChanges();
 
@@ -8004,7 +8160,7 @@ async function _batchAlignAllTasks() {
     const tasksToAlign = state.tasks.filter(t => {
         const text = getSourceText(t);
         if (!text || !text.trim()) return false;
-        if (t.aligned && !forceRealign) return false;
+        if (t.aligned && !forceRealign && !overrideForce) return false;
         const hasAudio = alignSource === 'video'
             ? (t.bgPath || t.videoPath)
             : t.audioPath;
@@ -8058,7 +8214,7 @@ async function _batchAlignAllTasks() {
                     language: language,
                     audio_cut_length: 5.0,
                     output_dir: audioDir,
-                    force: task.aligned ? true : false,  // 已对齐过则强制重新转录
+                    force: (task.aligned || overrideForce) ? true : false,  // 已对齐过则强制重新转录
                 }),
             });
 
@@ -8489,6 +8645,11 @@ function _injectBatchTableCSS() {
         .rbt-table th.rbt-grp-ovl   { background:#221d28; box-shadow: inset 0 3px 0 #f59e0b, inset -1px 0 0 rgba(255,255,255,0.03); }
         .rbt-table th.rbt-grp-scr   { background:#24162e; box-shadow: inset 0 3px 0 #f43f5e, inset -1px 0 0 rgba(255,255,255,0.03); }
         .rbt-table th:last-child { border-right:none; }
+        .rbt-col-toggle {
+            display:flex; align-items:center; gap:8px; padding:6px 12px; font-size:11px; color:#ccc; cursor:pointer; transition:background .15s;
+        }
+        .rbt-col-toggle:hover { background:rgba(255,255,255,0.06); }
+        .rbt-col-toggle input[type="checkbox"] { margin:0; transform:scale(0.9); cursor:pointer; }
         .rbt-th-wrap {
             display:flex; align-items:center; gap:4px; min-width:0;
         }
@@ -9348,16 +9509,22 @@ function _batchImportConfig(file) {
 document.addEventListener('DOMContentLoaded', async () => {
     _batchAutoRestore();
 
-    // 如果未设置工程路径，默认使用操作系统的“下载”文件夹
-    if (!_batchTableState.projectDir && window.electronAPI && window.electronAPI.getDownloadsPath) {
-        try {
-            const dlPath = await window.electronAPI.getDownloadsPath();
-            if (dlPath) {
-                _batchTableState.projectDir = dlPath;
-                _batchAutoSave(); // 保存初始配置以固化路径
+    // 如果未设置工程路径，优先使用设置页自定义目录，否则用"下载"文件夹
+    if (!_batchTableState.projectDir) {
+        const customDir = localStorage.getItem('vk_default_output_dir');
+        if (customDir) {
+            _batchTableState.projectDir = customDir;
+            _batchAutoSave();
+        } else if (window.electronAPI && window.electronAPI.getDownloadsPath) {
+            try {
+                const dlPath = await window.electronAPI.getDownloadsPath();
+                if (dlPath) {
+                    _batchTableState.projectDir = dlPath;
+                    _batchAutoSave();
+                }
+            } catch (err) {
+                console.warn('Failed to set default project dir:', err);
             }
-        } catch (err) {
-            console.warn('Failed to set default project dir to downloads:', err);
         }
     }
 
@@ -9504,8 +9671,8 @@ function _showClipAbPasteModal() {
     <div style="background:#1a1a2e;border:1px solid #333;border-radius:14px;padding:28px;width:950px;max-height:85vh;box-shadow:0 20px 60px rgba(0,0,0,0.8);display:flex;flex-direction:column;">
         <div style="font-size:16px;font-weight:700;color:#eee;margin-bottom:4px;">✂️ 批量 A/B 混剪模式：智能任务提取</div>
         <div style="font-size:11px;color:#888;margin-bottom:12px;line-height:1.6;">
-            每行格式 (Tab分隔)：<code style="background:#222;padding:2px 6px;border-radius:3px;color:#b8a0ff;">片段名  A标题  A正文  B标题  B正文</code><br>
-            • 每个片段素材将自动衍生分配 <strong style="color:#4c9eff">2段任务</strong> (即 A版 + B版)。只需在此贴入双版文案，点击生成即可预览。
+            直接从谷歌表格复制粘贴，列顺序：<code style="background:#222;padding:2px 6px;border-radius:3px;color:#b8a0ff;">视频名称  片段名称  时间段  A标题  A正文  B标题  B正文</code><br>
+            • 每行自动衍生 <strong style="color:#4c9eff">A版 + B版</strong> 两个任务。粘贴后即时预览。
         </div>
 
         <!-- 全局设定区 -->
@@ -9547,21 +9714,31 @@ function _showClipAbPasteModal() {
         </div>
 
         <div style="display:flex;gap:16px;flex:1;min-height:300px;margin-bottom:16px;">
-            <div style="flex:1;display:flex;flex-direction:column;width:35%;">
-                <label style="font-size:11px;color:#888;display:block;margin-bottom:4px;">📋 1. 将文案全选并复制到此处</label>
-                <textarea id="rbt-clip-ab-area" style="flex:1;width:100%;background:#141420;border:1px solid #333;border-radius:8px;color:#ddd;font-size:12px;padding:12px;font-family:monospace;resize:none;white-space:pre;"
-                    placeholder="名称	A标题	A正文	B标题	B正文\nclip_01	震惊！	这个方法太绝了	Did you know	This trick is amazing\nclip_02	必看！	三分钟学会	Watch this	3 min guide"></textarea>
-            </div>
-            <div style="flex:1;display:flex;flex-direction:column;width:65%;">
+            <div style="flex:1.2;display:flex;flex-direction:column;">
                 <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;">
-                    <label style="font-size:11px;color:#888;">👁️ 2. 右侧表格即时预览最终效果</label>
-                    <label style="display:flex;align-items:center;gap:4px;font-size:10px;color:#aaa;cursor:pointer;">
-                        <input type="checkbox" id="rbt-clip-ab-footer" style="accent-color:var(--accent);">
-                        我包含结尾数据(第5/6列)
-                    </label>
+                    <label style="font-size:11px;color:#888;">📋 1. 从谷歌表格直接粘贴到下方表格</label>
+                    <button id="rbt-clip-ab-clear" style="padding:2px 8px;border-radius:4px;border:1px solid #555;background:transparent;color:#888;cursor:pointer;font-size:10px;">清空</button>
                 </div>
+                <div style="flex:1;overflow-y:auto;background:#0d0d16;border:1px solid #333;border-radius:8px;">
+                    <table id="rbt-clip-ab-table" style="width:100%;border-collapse:collapse;font-size:11px;table-layout:fixed;">
+                        <thead><tr style="background:#1a1a2e;position:sticky;top:0;z-index:2;">
+                            <th style="padding:5px 4px;border-bottom:1px solid #444;color:#a78bfa;width:80px;">视频名称</th>
+                            <th style="padding:5px 4px;border-bottom:1px solid #444;color:#a78bfa;width:70px;">片段名称</th>
+                            <th style="padding:5px 4px;border-bottom:1px solid #444;color:#a78bfa;width:70px;">时间段</th>
+                            <th style="padding:5px 4px;border-bottom:1px solid #444;color:#e879a8;">A标题</th>
+                            <th style="padding:5px 4px;border-bottom:1px solid #444;color:#e879a8;">A正文</th>
+                            <th style="padding:5px 4px;border-bottom:1px solid #444;color:#4c9eff;">B标题</th>
+                            <th style="padding:5px 4px;border-bottom:1px solid #444;color:#4c9eff;">B正文</th>
+                        </tr></thead>
+                        <tbody id="rbt-clip-ab-tbody"></tbody>
+                    </table>
+                </div>
+                <textarea id="rbt-clip-ab-area" style="position:absolute;left:-9999px;top:-9999px;width:1px;height:1px;opacity:0;"></textarea>
+            </div>
+            <div style="flex:0.8;display:flex;flex-direction:column;">
+                <label style="font-size:11px;color:#888;display:block;margin-bottom:4px;">👁️ 2. 预览最终生成的A/B任务</label>
                 <div id="rbt-clip-ab-preview" style="flex:1;background:#0d0d16;border:1px dashed #444;border-radius:8px;padding:8px;overflow-y:auto;font-size:11px;line-height:1.5;">
-                    <div style="color:#666;text-align:center;padding:20px;">等待输入... 右侧将实时模拟生成A/B任务</div>
+                    <div style="color:#666;text-align:center;padding:20px;">等待粘贴数据...</div>
                 </div>
             </div>
         </div>
@@ -9574,53 +9751,177 @@ function _showClipAbPasteModal() {
 
     document.body.appendChild(overlay);
 
+    // ── 表格数据模型 ──
+    let _tableData = []; // [{videoName, clipName, timeRange, aTitle, aBody, bTitle, bBody}]
+    const COL_KEYS = ['videoName','clipName','timeRange','aTitle','aBody','bTitle','bBody'];
+
+    function _ensureMinRows(n) {
+        while (_tableData.length < n) _tableData.push({videoName:'',clipName:'',timeRange:'',aTitle:'',aBody:'',bTitle:'',bBody:''});
+    }
+    _ensureMinRows(5);
+
+    function _renderTable() {
+        const tbody = overlay.querySelector('#rbt-clip-ab-tbody');
+        if (!tbody) return;
+        _ensureMinRows(Math.max(5, _tableData.length + 2));
+        const cellStyle = 'padding:4px 5px;border-bottom:1px solid #222;color:#ddd;outline:none;background:transparent;';
+        let html = '';
+        for (let r = 0; r < _tableData.length; r++) {
+            const row = _tableData[r];
+            const hasData = COL_KEYS.some(k => row[k]);
+            const rowBg = hasData ? '#141420' : '#0d0d16';
+            html += `<tr style="background:${rowBg};">`;
+            for (let c = 0; c < COL_KEYS.length; c++) {
+                html += `<td contenteditable="true" data-r="${r}" data-c="${c}" style="${cellStyle}">${_escHtml(row[COL_KEYS[c]] || '')}</td>`;
+            }
+            html += '</tr>';
+        }
+        tbody.innerHTML = html;
+        // 绑定单元格编辑事件
+        tbody.querySelectorAll('td[contenteditable]').forEach(td => {
+            td.addEventListener('input', () => {
+                const r = parseInt(td.dataset.r), c = parseInt(td.dataset.c);
+                _tableData[r][COL_KEYS[c]] = td.textContent;
+                _syncToHiddenArea();
+                _renderAbPreview();
+            });
+        });
+    }
+
+    // 同步表格数据到隐藏 textarea（供导入用）
+    function _syncToHiddenArea() {
+        const area = overlay.querySelector('#rbt-clip-ab-area');
+        if (!area) return;
+        area.value = _tableData
+            .filter(row => COL_KEYS.some(k => row[k]))
+            .map(row => COL_KEYS.map(k => row[k] || '').join('\t'))
+            .join('\n');
+    }
+
+    // ── 粘贴拦截（支持 Google Sheets 格式，含引号内换行）──
+    function _parseTSV(text) {
+        // Google Sheets 粘贴：引号内的换行不算行分隔符
+        const rows = [];
+        let row = [];
+        let cell = '';
+        let inQuote = false;
+        for (let i = 0; i < text.length; i++) {
+            const ch = text[i];
+            if (inQuote) {
+                if (ch === '"' && text[i + 1] === '"') {
+                    cell += '"'; i++; // 转义引号
+                } else if (ch === '"') {
+                    inQuote = false;
+                } else {
+                    cell += ch;
+                }
+            } else {
+                if (ch === '"') {
+                    inQuote = true;
+                } else if (ch === '\t') {
+                    row.push(cell.trim()); cell = '';
+                } else if (ch === '\n' || ch === '\r') {
+                    if (ch === '\r' && text[i + 1] === '\n') i++;
+                    row.push(cell.trim()); cell = '';
+                    if (row.some(c => c)) rows.push(row);
+                    row = [];
+                } else {
+                    cell += ch;
+                }
+            }
+        }
+        row.push(cell.trim());
+        if (row.some(c => c)) rows.push(row);
+        return rows;
+    }
+
+    function _handlePaste(e) {
+        e.preventDefault();
+        const text = (e.clipboardData || window.clipboardData).getData('text/plain');
+        if (!text) return;
+        const lines = _parseTSV(text);
+        // 检测是否含有表头行（跳过）
+        let startIdx = 0;
+        if (lines.length > 1) {
+            const firstLine = lines[0].join(' ').toLowerCase();
+            if (firstLine.includes('标题') || firstLine.includes('名称') || firstLine.includes('title') || firstLine.includes('name')) {
+                startIdx = 1;
+            }
+        }
+        // 确定是追加还是替换
+        const target = e.target;
+        let insertRow = 0;
+        if (target && target.dataset && target.dataset.r !== undefined) {
+            insertRow = parseInt(target.dataset.r);
+        }
+        // 如果从第0行粘贴且表格是空的，直接替换
+        const isTableEmpty = !_tableData.some(row => COL_KEYS.some(k => row[k]));
+        if (isTableEmpty) insertRow = 0;
+
+        for (let i = startIdx; i < lines.length; i++) {
+            const cols = lines[i]; // 已经是数组
+            const rowIdx = insertRow + (i - startIdx);
+            _ensureMinRows(rowIdx + 1);
+            for (let c = 0; c < Math.min(cols.length, COL_KEYS.length); c++) {
+                // 保留单元格内换行，替换为空格显示
+                _tableData[rowIdx][COL_KEYS[c]] = (cols[c] || '').replace(/[\r\n]+/g, ' ').trim();
+            }
+        }
+        _ensureMinRows(_tableData.length + 2);
+        _renderTable();
+        _syncToHiddenArea();
+        _renderAbPreview();
+    }
+
     function _renderAbPreview() {
-        const raw = overlay.querySelector('#rbt-clip-ab-area').value.trim();
-        const hasFooter = overlay.querySelector('#rbt-clip-ab-footer').checked;
         const previewEl = overlay.querySelector('#rbt-clip-ab-preview');
+        const dataRows = _tableData.filter(row => COL_KEYS.some(k => row[k]));
         
-        if (!raw) {
-            previewEl.innerHTML = '<div style="color:#666;text-align:center;padding:20px;">等待输入... 右侧将实时模拟生成A/B任务</div>';
+        if (dataRows.length === 0) {
+            previewEl.innerHTML = '<div style="color:#666;text-align:center;padding:20px;">等待粘贴数据...</div>';
             return;
         }
 
-        const lines = raw.split('\n').filter(l => l.trim());
         let html = '<table style="width:100%;border-collapse:collapse;color:#ccc;table-layout:fixed;border-radius:4px;overflow:hidden;box-shadow:0 0 0 1px #333;">';
-        html += '<tr style="background:#222;position:sticky;top:0;"><th style="padding:4px 6px;border-bottom:1px solid #444;width:35px;">版本</th><th style="padding:4px 6px;border-bottom:1px solid #444;width:60px;">名称</th><th style="padding:4px 6px;border-bottom:1px solid #444;text-align:left;">覆层文案内容</th></tr>';
+        html += '<tr style="background:#222;position:sticky;top:0;"><th style="padding:4px 6px;border-bottom:1px solid #444;width:35px;">版</th><th style="padding:4px 6px;border-bottom:1px solid #444;width:80px;">名称</th><th style="padding:4px 6px;border-bottom:1px solid #444;width:60px;">时间</th><th style="padding:4px 6px;border-bottom:1px solid #444;text-align:left;">文案内容</th></tr>';
         
-        let validCount = 0;
-        for (let i = 0; i < Math.min(lines.length, 30); i++) {
-            const cols = lines[i].split('\t');
-            if (cols.length < 3) continue;
-            validCount++;
+        for (let i = 0; i < Math.min(dataRows.length, 30); i++) {
+            const row = dataRows[i];
+            const clipName = row.clipName || row.videoName || `clip_${i+1}`;
+            const timeStr = row.timeRange ? `<span style="color:#888;">${_escHtml(row.timeRange)}</span>` : '';
             
-            const name = (cols[0] || '').trim();
-            let aTitle = (cols[1] || '').trim(), aBody = (cols[2] || '').trim(), aFooter = hasFooter ? (cols[5] || '').trim() : '';
-            let bTitle = (cols[3] || '').trim(), bBody = (cols[4] || '').trim(), bFooter = hasFooter ? (cols[6] || '').trim() : '';
+            let aTitle = row.aTitle ? `<strong style="color:#ccc;">${_escHtml(row.aTitle)}</strong>` : '';
+            let aBody = row.aBody ? `<span style="color:#aaa;">${_escHtml(row.aBody)}</span>` : '';
+            let bTitle = row.bTitle ? `<strong style="color:#ccc;">${_escHtml(row.bTitle)}</strong>` : '';
+            let bBody = row.bBody ? `<span style="color:#aaa;">${_escHtml(row.bBody)}</span>` : '';
             
-            aTitle = aTitle ? `<strong style="color:#ccc;">${aTitle}</strong>` : '';
-            aBody = aBody ? `<span style="color:#aaa;">${aBody}</span>` : '';
-            aFooter = aFooter ? `<span style="color:#888;">${aFooter}</span>` : '';
-            
-            bTitle = bTitle ? `<strong style="color:#ccc;">${bTitle}</strong>` : '';
-            bBody = bBody ? `<span style="color:#aaa;">${bBody}</span>` : '';
-            bFooter = bFooter ? `<span style="color:#888;">${bFooter}</span>` : '';
-            
-            html += `<tr style="background:#1a1a24;"><td style="padding:4px 6px;border-bottom:1px solid #2a2a3a;color:#a78bfa;font-weight:bold;text-align:center;">A版</td><td style="padding:4px 6px;border-bottom:1px solid #2a2a3a;word-break:break-all;color:#ccc;">${name}_A</td><td style="padding:4px 6px;border-bottom:1px solid #2a2a3a;word-break:break-word;">${[aTitle, aBody, aFooter].filter(Boolean).join(' <span style="color:#555">|</span> ')}</td></tr>`;
-            
-            if (bTitle || bBody || bFooter) {
-                html += `<tr style="background:#141a24;"><td style="padding:4px 6px;border-bottom:1px solid #2a2a3a;color:#4c9eff;font-weight:bold;text-align:center;">B版</td><td style="padding:4px 6px;border-bottom:1px solid #2a2a3a;word-break:break-all;color:#ccc;">${name}_B</td><td style="padding:4px 6px;border-bottom:1px solid #2a2a3a;word-break:break-word;">${[bTitle, bBody, bFooter].filter(Boolean).join(' <span style="color:#555">|</span> ')}</td></tr>`;
+            if (aTitle || aBody) {
+                html += `<tr style="background:#1a1a24;"><td style="padding:4px 6px;border-bottom:1px solid #2a2a3a;color:#a78bfa;font-weight:bold;text-align:center;">A</td><td style="padding:4px 6px;border-bottom:1px solid #2a2a3a;word-break:break-all;color:#ccc;">${_escHtml(clipName)}_A</td><td style="padding:4px 6px;border-bottom:1px solid #2a2a3a;">${timeStr}</td><td style="padding:4px 6px;border-bottom:1px solid #2a2a3a;word-break:break-word;">${[aTitle, aBody].filter(Boolean).join(' <span style="color:#555">|</span> ')}</td></tr>`;
+            }
+            if (bTitle || bBody) {
+                html += `<tr style="background:#141a24;"><td style="padding:4px 6px;border-bottom:1px solid #2a2a3a;color:#4c9eff;font-weight:bold;text-align:center;">B</td><td style="padding:4px 6px;border-bottom:1px solid #2a2a3a;word-break:break-all;color:#ccc;">${_escHtml(clipName)}_B</td><td style="padding:4px 6px;border-bottom:1px solid #2a2a3a;">${timeStr}</td><td style="padding:4px 6px;border-bottom:1px solid #2a2a3a;word-break:break-word;">${[bTitle, bBody].filter(Boolean).join(' <span style="color:#555">|</span> ')}</td></tr>`;
             }
         }
         html += '</table>';
-        if (lines.length > 30) {
-            html += `<div style="text-align:center;padding:8px;color:#888;font-size:11px;">(已解析 ${lines.length} 行源数据，仅展示前 30 行预览)</div>`;
+        if (dataRows.length > 30) {
+            html += `<div style="text-align:center;padding:8px;color:#888;font-size:11px;">(共 ${dataRows.length} 行，仅展示前 30 行)</div>`;
         }
         previewEl.innerHTML = html;
     }
 
-    overlay.querySelector('#rbt-clip-ab-area').addEventListener('input', _renderAbPreview);
-    overlay.querySelector('#rbt-clip-ab-footer').addEventListener('change', _renderAbPreview);
+    // 初始化表格
+    _renderTable();
+    // 在整个表格容器上拦截粘贴
+    const tableContainer = overlay.querySelector('#rbt-clip-ab-table');
+    if (tableContainer) tableContainer.addEventListener('paste', _handlePaste);
+    // 清空按钮
+    overlay.querySelector('#rbt-clip-ab-clear').addEventListener('click', () => {
+        _tableData = [];
+        _ensureMinRows(5);
+        _renderTable();
+        _syncToHiddenArea();
+        _renderAbPreview();
+    });
 
     function setupFileSelectPath(id) {
         const input = overlay.querySelector('#' + id);
@@ -9784,7 +10085,6 @@ function _showClipAbPasteModal() {
         localStorage.setItem('rbt_clip_cv_mode', cvMode);
         localStorage.setItem('rbt_clip_cv_preset', cvPath);
 
-        const hasFooter = overlay.querySelector('#rbt-clip-ab-footer').checked;
         const state = window._reelsState;
         
         // 解析多视频文件夹逻辑
@@ -9831,27 +10131,34 @@ function _showClipAbPasteModal() {
             if (cols.length < 3) continue;
 
             const rawName = (cols[0] || '').trim();
-            // 尝试从名称中提取入出点裁切信息
             let trimStart = null, trimEnd = null;
             let displayBaseName = rawName;
-            
-            const timeMatch = rawName.match(/^(.+?)\s*[—\-~～]+\s*(.+)$/);
-            if (timeMatch) {
-                const ps1 = _parseTimeStr(timeMatch[1].trim());
-                const ps2 = _parseTimeStr(timeMatch[2].trim());
-                if (ps1 !== null && ps2 !== null) {
-                    trimStart = ps1;
-                    trimEnd = ps2;
-                    // 如果名字全都是时间，就不改；否则可以保留原始信息
+
+            // 7列: 视频名称(0) 片段名称(1) 时间段(2) A标题(3) A正文(4) B标题(5) B正文(6)
+            const videoName = (cols[0] || '').trim();
+            const clipName = (cols[1] || '').trim();
+            const timeRange = (cols[2] || '').trim();
+            const aTitle = (cols[3] || '').trim();
+            const aBody = (cols[4] || '').trim();
+            const bTitle = (cols[5] || '').trim();
+            const bBody = (cols[6] || '').trim();
+            const aFooter = '';
+            const bFooter = '';
+
+            // 从时间段列提取裁切入出点
+            if (timeRange) {
+                const tMatch = timeRange.match(/^(.+?)\s*[-—~～]+\s*(.+)$/);
+                if (tMatch) {
+                    const ps1 = _parseTimeStr(tMatch[1].trim());
+                    const ps2 = _parseTimeStr(tMatch[2].trim());
+                    if (ps1 !== null && ps2 !== null) {
+                        trimStart = ps1;
+                        trimEnd = ps2;
+                    }
                 }
             }
-
-            const aTitle = (cols[1] || '').trim();
-            const aBody = (cols[2] || '').trim();
-            const bTitle = (cols[3] || '').trim();
-            const bBody = (cols[4] || '').trim();
-            const aFooter = hasFooter ? (cols[5] || '').trim() : '';
-            const bFooter = hasFooter ? (cols[6] || '').trim() : '';
+            // 使用片段名称作为任务名，回退到视频名称
+            displayBaseName = clipName || videoName || rawName;
 
             // 获取相应的 Content Video 路径
             let assignCvPath = '';

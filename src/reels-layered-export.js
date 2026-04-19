@@ -169,11 +169,31 @@ async function reelsLayeredExport(params) {
             }
         }
         if (!duration || duration <= 0) {
-            let rawBgDur = await window.electronAPI.getMediaDuration(backgroundPath);
-            if (rawBgDur > 0 && _bgDurFactor !== 1.0) {
-                duration = rawBgDur * _bgDurFactor;
-            } else {
-                duration = rawBgDur;
+            if (isMultiClip) {
+                // 多素材模式：累加素材池总时长
+                log(`正在获取多素材池时长 (${bgClipPool.length} 个)...`);
+                let poolTotalDur = 0;
+                for (const clipPath of bgClipPool) {
+                    if (_isLayeredImageFile(clipPath)) {
+                        poolTotalDur += 5.0; // 图片默认 5 秒
+                    } else {
+                        const clipDur = await window.electronAPI.getMediaDuration(clipPath);
+                        if (clipDur > 0) poolTotalDur += clipDur;
+                    }
+                }
+                if (poolTotalDur > 0 && _bgDurFactor !== 1.0) {
+                    duration = poolTotalDur * _bgDurFactor;
+                } else {
+                    duration = poolTotalDur;
+                }
+                log(`多素材池总时长: ${duration.toFixed(2)}s`);
+            } else if (backgroundPath) {
+                let rawBgDur = await window.electronAPI.getMediaDuration(backgroundPath);
+                if (rawBgDur > 0 && _bgDurFactor !== 1.0) {
+                    duration = rawBgDur * _bgDurFactor;
+                } else {
+                    duration = rawBgDur;
+                }
             }
         }
         if (!duration || duration <= 0) {
@@ -451,9 +471,20 @@ async function reelsLayeredExport(params) {
             // ══════════════════════════════════════
             subtitleCtx.clearRect(0, 0, targetWidth, targetHeight);
 
-            const activeSeg = segments.find(seg => t >= (seg.start || 0) && t <= (seg.end || 0));
-            if (activeSeg) {
-                subtitleRenderer.renderSubtitle(style, activeSeg, t, targetWidth, targetHeight);
+            if (segments && segments.length > 0) {
+                let activeSeg = segments.find(seg => t >= (seg.start || 0) && t <= (seg.end || 0));
+                // Scrolling mode: find nearest segment during gaps
+                if (!activeSeg && style.scrolling_mode && segments.length > 0) {
+                    let best = segments[0];
+                    for (const seg of segments) {
+                        if ((seg.start || 0) <= t) best = seg;
+                    }
+                    activeSeg = best;
+                }
+                if (activeSeg) {
+                    subtitleRenderer.setContextSegments(segments);
+                    subtitleRenderer.renderSubtitle(style, activeSeg, t, targetWidth, targetHeight);
+                }
             }
 
             // 保存字幕层 PNG（透明底）

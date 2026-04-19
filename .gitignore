@@ -79,3 +79,4 @@ vendor/face_detection/
 # ==================== CodeQL & Security ====================
 codeql-db/
 *.sarif
+electron/pipe_frames.raw

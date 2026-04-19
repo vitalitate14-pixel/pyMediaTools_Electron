@@ -29,10 +29,14 @@ class ReelsCanvasRenderer {
         this._seCache = { key: null, img: null }; // stroke expand cache
     }
 
+    setContextSegments(segments) {
+        this._contextSegments = segments || [];
+    }
+
     /**
      * 主渲染入口
      */
-    renderSubtitle(style, segment, currentTime, videoW, videoH) {
+    renderSubtitle(style, segment, currentTime, videoW, videoH, _isSubCall = false) {
         const ctx = this.ctx;
         const s = style || {};
         const text = segment.edited_text || segment.text || '';
@@ -40,11 +44,120 @@ class ReelsCanvasRenderer {
 
         const segStart = segment.start || 0;
         const segEnd = segment.end || 0;
-        if (currentTime < segStart || currentTime > segEnd) return;
+        
+        // Context interception for Scrolling Mode (teleprompter-style)
+        if (!_isSubCall && s.scrolling_mode && this._contextSegments && this._contextSegments.length > 1) {
+            // Find which segment is active
+            let activeIdx = -1;
+            for (let si = 0; si < this._contextSegments.length; si++) {
+                const seg = this._contextSegments[si];
+                if (currentTime >= seg.start && currentTime <= seg.end) {
+                    activeIdx = si;
+                    break;
+                }
+            }
+            if (activeIdx === -1) {
+                for (let si = 0; si < this._contextSegments.length; si++) {
+                    if (this._contextSegments[si].start > currentTime) {
+                        activeIdx = Math.max(0, si - 1);
+                        break;
+                    }
+                }
+                if (activeIdx === -1) activeIdx = this._contextSegments.length - 1;
+            }
 
-        // 【拦截】如果包含富文本样式范围，则进入独立的富文本渲染循环，以此保证旧版 0 损耗
-        if (segment.styled_ranges && segment.styled_ranges.length > 0) {
+            const activeSeg = this._contextSegments[activeIdx];
+            const fontSize = s.fontsize || 60;
+            // Gap between lines: generous spacing for readability
+            const gap = fontSize * 1.8;
+
+            // Smooth transition when switching lines
+            const transDur = 0.30;
+            let scrollAnim = 0;
+            if (currentTime >= activeSeg.start && currentTime < activeSeg.start + transDur && activeIdx > 0) {
+                const t = (currentTime - activeSeg.start) / transDur;
+                const ease = 1 - Math.pow(1 - t, 3);
+                scrollAnim = (1 - ease);
+            }
+            const centerIdx = activeIdx - scrollAnim;
+
+            const visibleLines = s.scrolling_visible_lines || 5;
+            const halfVisible = visibleLines / 2;
+            const contextOpacity = s.scrolling_opacity_context ?? 0.25;
+
+            for (let si = 0; si < this._contextSegments.length; si++) {
+                const distFromCenter = si - centerIdx;
+                if (Math.abs(distFromCenter) > halfVisible + 1) continue;
+
+                const yOffset = distFromCenter * gap;
+                const absDist = Math.abs(distFromCenter);
+
+                // Opacity
+                let lineAlpha = 1.0;
+                if (absDist > 0.5) {
+                    lineAlpha = contextOpacity;
+                    if (absDist > halfVisible - 0.5) {
+                        lineAlpha *= Math.max(0, 1.0 - (absDist - (halfVisible - 0.5)));
+                    }
+                }
+                if (lineAlpha <= 0.01) continue;
+
+                const targetSeg = this._contextSegments[si];
+                const targetStyle = { ...s };
+                targetStyle.scrolling_mode = false;
+
+                // Determine render time and highlight state
+                const isPast = currentTime > targetSeg.end;
+                const isFuture = currentTime < targetSeg.start;
+                const isPlaying = !isPast && !isFuture;
+                let renderTime;
+                if (isPlaying) {
+                    renderTime = currentTime;
+                } else if (isPast) {
+                    // Already read: plain text, no highlight
+                    renderTime = targetSeg.start;
+                    targetStyle.karaoke_highlight = false;
+                    targetStyle.color_high = targetStyle.color_text || '#FFFFFF';
+                } else {
+                    // Future: show static, no highlight
+                    renderTime = targetSeg.start;
+                    targetStyle.karaoke_highlight = false;
+                    targetStyle.color_high = targetStyle.color_text || '#FFFFFF';
+                }
+
+                // Scrolling mode: disable ALL animations — scroll handles transitions
+                targetStyle.anim_in_type = 'none';
+                targetStyle.anim_out_type = 'none';
+                targetStyle.dynamic_box = false;
+
+                // Apply opacity through style so renderSubtitle respects it
+                targetStyle.opacity_text_global = lineAlpha;
+
+                ctx.save();
+                ctx.translate(0, yOffset);
+
+                this.renderSubtitle(targetStyle, targetSeg, renderTime, videoW, videoH, true);
+                ctx.restore();
+            }
+            return;
+        }
+
+
+        // For non-scrolling lines, we only render if active
+        if (!_isSubCall && (currentTime < segStart || currentTime > segEnd)) return;
+
+        // 【拦截】如果包含富文本样式范围，或启用了自动着色规则，则进入独立的富文本渲染循环，以此保证旧版 0 损耗
+        let finalStyledRanges = segment.styled_ranges || [];
+        if (s.auto_color_rules && s.auto_color_rules.length > 0 && typeof ReelsRichText !== 'undefined') {
+            const autoRanges = ReelsRichText.getCachedAutoColor(segment.text, s.auto_color_rules);
+            finalStyledRanges = ReelsRichText.mergeAutoAndManual(autoRanges, finalStyledRanges);
+        }
+
+        if (finalStyledRanges && finalStyledRanges.length > 0) {
+            const origRanges = segment.styled_ranges;
+            segment.styled_ranges = finalStyledRanges;
             this._renderRichTextSubtitle(style, segment, currentTime, videoW, videoH);
+            segment.styled_ranges = origRanges; // 恢复原始引用
             return;
         }
 
@@ -310,7 +423,9 @@ class ReelsCanvasRenderer {
         }
 
         // Global opacity
-        const globalAlpha = ((s.opacity_text_global || 255) / 255) * animOpacity;
+        const rawOp = s.opacity_text_global !== undefined ? s.opacity_text_global : 255;
+        const normOp = rawOp <= 1.0 && rawOp > 0 ? rawOp : rawOp / 255;
+        const globalAlpha = normOp * animOpacity;
         ctx.globalAlpha = globalAlpha;
 
         // ── Typewriter ──
@@ -357,6 +472,58 @@ class ReelsCanvasRenderer {
             // Box blur (feathered edge)
             const boxBlur = s.box_blur || 0;
             const rad = s.box_radius || 8;
+            
+            const isAdaptive = s.box_adaptive_width && !advEnabled;
+            let tempStartY;
+            if (isAdaptive) {
+                tempStartY = cy - totalH / 2;
+            }
+
+            const buildBoxPath = (expand) => {
+                ctx.beginPath();
+                if (isAdaptive) {
+                    for (let i = 0; i < visibleLines.length; i++) {
+                        const lineW = lineWidths[i];
+                        const effectiveLineW = (actualLineWidths[i] != null && actualLineWidths[i] > lineW) ? actualLineWidths[i] : lineW;
+                        let xStart = cx - effectiveLineW / 2; // Usually center
+                        const y = tempStartY + (blockTypography ? lineTopOffsets[i] : (i * lineStep));
+                        const lRectX = xStart - effectivePadX - expand;
+                        const lRectY = y - effectivePadY - expand;
+                        const lRectW = effectiveLineW + effectivePadX * 2 + expand * 2;
+                        const lRectH = lineH + effectivePadY * 2 + expand * 2;
+                        
+                        let r = rad + expand * 0.3;
+                        r = Math.min(r, lRectW / 2, lRectH / 2);
+                        ctx.moveTo(lRectX + r, lRectY);
+                        ctx.lineTo(lRectX + lRectW - r, lRectY);
+                        ctx.quadraticCurveTo(lRectX + lRectW, lRectY, lRectX + lRectW, lRectY + r);
+                        ctx.lineTo(lRectX + lRectW, lRectY + lRectH - r);
+                        ctx.quadraticCurveTo(lRectX + lRectW, lRectY + lRectH, lRectX + lRectW - r, lRectY + lRectH);
+                        ctx.lineTo(lRectX + r, lRectY + lRectH);
+                        ctx.quadraticCurveTo(lRectX, lRectY + lRectH, lRectX, lRectY + lRectH - r);
+                        ctx.lineTo(lRectX, lRectY + r);
+                        ctx.quadraticCurveTo(lRectX, lRectY, lRectX + r, lRectY);
+                        ctx.closePath();
+                    }
+                } else {
+                    let r = rad + expand * 0.3;
+                    const lRectX = rectX - expand;
+                    const lRectY = rectY - expand;
+                    const lRectW = rectW + expand * 2;
+                    const lRectH = rectH + expand * 2;
+                    r = Math.min(r, lRectW / 2, lRectH / 2);
+                    ctx.moveTo(lRectX + r, lRectY);
+                    ctx.lineTo(lRectX + lRectW - r, lRectY);
+                    ctx.quadraticCurveTo(lRectX + lRectW, lRectY, lRectX + lRectW, lRectY + r);
+                    ctx.lineTo(lRectX + lRectW, lRectY + lRectH - r);
+                    ctx.quadraticCurveTo(lRectX + lRectW, lRectY + lRectH, lRectX + lRectW - r, lRectY + lRectH);
+                    ctx.lineTo(lRectX + r, lRectY + lRectH);
+                    ctx.quadraticCurveTo(lRectX, lRectY + lRectH, lRectX, lRectY + lRectH - r);
+                    ctx.lineTo(lRectX, lRectY + r);
+                    ctx.quadraticCurveTo(lRectX, lRectY, lRectX + r, lRectY);
+                    ctx.closePath();
+                }
+            };
 
             if (boxBlur > 0) {
                 const steps = Math.min(20, Math.max(6, Math.floor(boxBlur * 0.5)));
@@ -369,9 +536,7 @@ class ReelsCanvasRenderer {
                     ctx.save();
                     ctx.globalAlpha = globalAlpha * Math.min(1, layerAlpha);
                     ctx.fillStyle = bgColor;
-                    this._roundRect(ctx, rectX - expand, rectY - expand,
-                        rectW + expand * 2, rectH + expand * 2,
-                        rad + expand * 0.3);
+                    buildBoxPath(expand);
                     ctx.fill();
                     ctx.restore();
                 }
@@ -423,7 +588,7 @@ class ReelsCanvasRenderer {
                 }
             }
 
-            this._roundRect(ctx, rectX, rectY, rectW, rectH, rad);
+            buildBoxPath(0);
             ctx.fill();
 
             // Highlight overlay
@@ -432,7 +597,7 @@ class ReelsCanvasRenderer {
                 hlGrad.addColorStop(0, 'rgba(255,255,255,0.24)');
                 hlGrad.addColorStop(1, 'rgba(255,255,255,0)');
                 ctx.fillStyle = hlGrad;
-                this._roundRect(ctx, rectX, rectY, rectW, rectH, rad);
+                buildBoxPath(0);
                 ctx.fill();
             }
             ctx.restore();
