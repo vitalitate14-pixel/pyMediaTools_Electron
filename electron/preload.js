@@ -35,9 +35,14 @@ function toFileUrl(filePath) {
 }
 
 // 暴露 API 给渲染进程
+const _autoSaveDir = path.join(require('os').homedir(), '.videokit');
+const _autoSavePath = path.join(_autoSaveDir, 'autosave.json');
+try { if (!fs.existsSync(_autoSaveDir)) fs.mkdirSync(_autoSaveDir, { recursive: true }); } catch (_) {}
+
 contextBridge.exposeInMainWorld('electronAPI', {
     // 平台信息
     platform: process.platform,
+    autoSavePath: _autoSavePath,
     resolveAssetUrl,
     toFileUrl,
     // 获取 File 对象的本地完整路径（contextIsolation 下 File.path 不可用）
@@ -57,6 +62,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
     selectDirectory: () => ipcRenderer.invoke('select-directory'),
     selectFiles: (options) => ipcRenderer.invoke('select-files', options),
     scanDirectory: (dirPath) => ipcRenderer.invoke('scan-directory', dirPath),
+    searchFilesRecursive: (searchDir, fileNames, maxDepth) => ipcRenderer.invoke('search-files-recursive', searchDir, fileNames, maxDepth),
+    checkFilesExist: (filePaths) => ipcRenderer.invoke('check-files-exist', filePaths),
     getDownloadsPath: () => ipcRenderer.invoke('get-downloads-path'),
 
     // 批量Reels - 烧录字幕
@@ -149,4 +156,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
     // 界面缩放（使用 Electron 原生 webFrame，正确处理布局视口）
     setZoomFactor: (factor) => webFrame.setZoomFactor(factor),
     getZoomFactor: () => webFrame.getZoomFactor(),
+
+    // 模板多窗口
+    openTemplateWindow: (templateId, templateName) => ipcRenderer.invoke('open-template-window', templateId, templateName),
 });

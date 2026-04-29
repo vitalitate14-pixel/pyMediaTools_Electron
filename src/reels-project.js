@@ -15,6 +15,31 @@
 
 const PROJECT_VERSION = '2.0.0';
 
+const REELS_TASK_EXTRA_FIELDS = [
+    'txtPath', 'txtContent', 'ttsText', 'ttsVoiceId', 'aiScript', 'aligned',
+    'exportName', 'status', 'error',
+    'bgScale', 'bgDurScale', 'audioDurScale',
+    'bgMode', 'bgClipPool', 'bgTransition', 'bgTransDur',
+    'bgmPath', 'bgmVolume', 'bgVideoVolume',
+    'contentVideoPath', 'contentVideoTrimStart', 'contentVideoTrimEnd',
+    'contentVideoScale', 'contentVideoX', 'contentVideoY', 'contentVideoVolume',
+    'overlays', 'cover', 'watermarks',
+    'pipPath',
+    'hookFile', 'hookTrimStart', 'hookTrimEnd', 'hookSpeed',
+    'hookTransition', 'hookTransDuration', 'hook',
+    'customDuration',
+    '_overlayPresetName',
+];
+
+function _clonePlain(value) {
+    if (value === undefined) return undefined;
+    try {
+        return JSON.parse(JSON.stringify(value));
+    } catch (_) {
+        return undefined;
+    }
+}
+
 // ═══════════════════════════════════════════════════════
 // 1. Collect Project Data (序列化)
 // ═══════════════════════════════════════════════════════
@@ -40,11 +65,30 @@ function collectProjectData(state) {
             srtPath: task.srtPath || '',
             fileName: task.fileName || '',
             segments: _sanitizeSegments(task.segments || []),
-            style: JSON.parse(JSON.stringify(task.style || style)),
+            style: JSON.parse(JSON.stringify(task.style || task.subtitleStyle || style)),
         };
 
-        if (task.bgSrcUrl) taskData.bgSrcUrl = task.bgSrcUrl;
-        if (task.srcUrl) taskData.srcUrl = task.srcUrl;
+        if (task.subtitleStyle) {
+            taskData.subtitleStyle = JSON.parse(JSON.stringify(task.subtitleStyle));
+        }
+        if (task._subtitlePreset) {
+            taskData._subtitlePreset = task._subtitlePreset;
+        }
+
+        for (const field of REELS_TASK_EXTRA_FIELDS) {
+            if (task[field] !== undefined) {
+                const cloned = _clonePlain(task[field]);
+                if (cloned !== undefined) taskData[field] = cloned;
+            }
+        }
+
+        // blob: URL 不可序列化（重载后失效），保存时剥离
+        if (task.bgSrcUrl && !String(task.bgSrcUrl).startsWith('blob:')) {
+            taskData.bgSrcUrl = task.bgSrcUrl;
+        }
+        if (task.srcUrl && !String(task.srcUrl).startsWith('blob:')) {
+            taskData.srcUrl = task.srcUrl;
+        }
 
         // 时间线序列化
         if (task.timeline) {
@@ -105,17 +149,31 @@ function applyProjectData(data) {
 
     const tasks = (normalized.tasks || []).map(t => {
         const bgPath = t.bgPath || t.videoPath || t.path || t.video || '';
+        const subtitleStyle = t.subtitleStyle || t.subtitle_style || t.style || {};
+        // 恢复时：重新生成可用的 file:// URL，不使用过期的 blob URL
+        let restoredSrcUrl = t.bgSrcUrl || t.srcUrl || null;
+        if (restoredSrcUrl && String(restoredSrcUrl).startsWith('blob:')) {
+            restoredSrcUrl = null; // blob URL 已失效
+        }
+        if (!restoredSrcUrl && bgPath && (bgPath.includes('/') || bgPath.includes('\\'))) {
+            // 从绝对路径生成有效的 file:// URL
+            if (window.electronAPI && window.electronAPI.toFileUrl) {
+                restoredSrcUrl = window.electronAPI.toFileUrl(bgPath);
+            }
+        }
         const task = {
             baseName: t.baseName || _extractFileName(bgPath).replace(/\.[^.]+$/, ''),
             bgPath: bgPath,
-            videoPath: bgPath,
-            bgSrcUrl: t.bgSrcUrl || t.srcUrl || null,
-            srcUrl: t.srcUrl || t.bgSrcUrl || null,
+            videoPath: t.videoPath || bgPath,
+            bgSrcUrl: restoredSrcUrl,
+            srcUrl: restoredSrcUrl,
             audioPath: t.audioPath || '',
             srtPath: t.srtPath || '',
             fileName: t.fileName || _extractFileName(bgPath || t.audioPath || ''),
             segments: t.segments || [],
             style: t.style || normalized.style || {},
+            subtitleStyle,
+            _subtitlePreset: t._subtitlePreset || t.subtitlePreset || t.subtitle_preset || '',
             srcVolume: t.srcVolume || 1.0,
         };
 
@@ -135,6 +193,13 @@ function applyProjectData(data) {
         task.textOverlays = t.textOverlays || t.text_overlays || [];
         task.imageOverlays = t.imageOverlays || t.image_overlays || [];
         task.introMedia = t.introMedia || t.intro_media || null;
+
+        for (const field of REELS_TASK_EXTRA_FIELDS) {
+            if (t[field] !== undefined) {
+                const cloned = _clonePlain(t[field]);
+                if (cloned !== undefined) task[field] = cloned;
+            }
+        }
 
         return task;
     });
@@ -253,12 +318,25 @@ async function loadProject() {
 }
 
 /**
- * 自动保存到 localStorage。
+ * 自动保存到文件系统（优先）或 localStorage（降级）。
+ * localStorage 有 5-10MB 限制，大项目（含大量 word-level segments）会静默失败。
  */
 function autoSaveProject(state) {
     try {
         const projectData = collectProjectData(state);
         const json = JSON.stringify(projectData);
+
+        // 优先写入文件系统（无大小限制）
+        if (window.electronAPI && window.electronAPI.writeFileText) {
+            const savePath = _getAutoSaveFilePath();
+            if (savePath) {
+                window.electronAPI.writeFileText(savePath, json);
+                window.electronAPI.writeFileText(savePath + '.time', new Date().toISOString());
+                return;
+            }
+        }
+
+        // 降级: localStorage
         localStorage.setItem('reels_autosave', json);
         localStorage.setItem('reels_autosave_time', new Date().toISOString());
     } catch (err) {
@@ -267,14 +345,33 @@ function autoSaveProject(state) {
 }
 
 /**
- * 从 localStorage 恢复自动保存。
+ * 从文件系统（优先）或 localStorage 恢复自动保存。
  */
 function loadAutoSave() {
     try {
-        const json = localStorage.getItem('reels_autosave');
+        let json = null;
+        let time = null;
+
+        // 优先从文件系统读取
+        if (window.electronAPI && window.electronAPI.readFileText) {
+            const savePath = _getAutoSaveFilePath();
+            if (savePath) {
+                const content = window.electronAPI.readFileText(savePath);
+                if (content && content.length > 2) {
+                    json = content;
+                    time = window.electronAPI.readFileText(savePath + '.time') || '';
+                }
+            }
+        }
+
+        // 降级: localStorage
+        if (!json) {
+            json = localStorage.getItem('reels_autosave');
+            time = localStorage.getItem('reels_autosave_time');
+        }
+
         if (!json) return null;
 
-        const time = localStorage.getItem('reels_autosave_time');
         const data = JSON.parse(json);
         const result = applyProjectData(data);
         result.autoSaveTime = time;
@@ -283,6 +380,14 @@ function loadAutoSave() {
         console.warn('[Project] Auto-load failed:', err);
         return null;
     }
+}
+
+/** 获取自动保存文件路径（由 preload.js 预计算） */
+function _getAutoSaveFilePath() {
+    if (window.electronAPI && window.electronAPI.autoSavePath) {
+        return window.electronAPI.autoSavePath;
+    }
+    return null;
 }
 
 /**

@@ -25,6 +25,7 @@ const subtitleUtils = require('./services/subtitleUtils');
 const { audioSubtitleSearchDifferentStrong } = require('./services/subtitleAlignment');
 const wav2lipService = require('./services/wav2lip');
 const geminiService = require('./services/gemini');
+const templateService = require('./services/templates');
 
 /**
  * 注册所有 IPC API 路由
@@ -991,6 +992,27 @@ async function routeAPI(endpoint, data) {
 
         case 'status':
             return { status: 'ok', backend: 'nodejs', uptime: process.uptime() };
+
+        // ==================== 视频模板预设 ====================
+        case 'templates/list':
+            return templateService.listTemplates();
+
+        case 'templates/get':
+            if (!data.id) throw new Error('缺少模板 ID');
+            return templateService.getTemplate(data.id);
+
+        case 'templates/save':
+            if (!data.name) throw new Error('缺少模板名称');
+            if (!data.projectData) throw new Error('缺少工程数据');
+            return templateService.saveTemplate(data);
+
+        case 'templates/delete':
+            if (!data.id) throw new Error('缺少模板 ID');
+            return templateService.deleteTemplate(data.id);
+
+        case 'templates/rename':
+            if (!data.id || !data.name) throw new Error('缺少模板 ID 或新名称');
+            return templateService.renameTemplate(data.id, data.name);
 
         // ==================== Wav2Lip 口型同步 ====================
         case 'wav2lip/check':

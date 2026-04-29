@@ -127,17 +127,51 @@ class ReelsOverlayPanel {
                             <span id="rop-scale-val" style="min-width:44px;text-align:right;font-size:12px;color:var(--text-muted);">100%</span>
                         </div>
                         <div id="rop-time-in-transform" style="display:contents;">
-                        <label>开始(s)</label><input type="number" id="rop-start" class="rop-input" step="0.1" min="0">
-                        <label>结束(s)</label><input type="number" id="rop-end" class="rop-input" step="0.1" min="0">
+                        <label>开始时间(s)</label><input type="number" id="rop-start" class="rop-input" step="0.1" min="0">
+                        <label>结束时间(s)</label><input type="number" id="rop-end" class="rop-input" step="0.1" min="0">
                         </div>
-                        <div style="grid-column: span 2; font-size:11px; color:var(--accent); margin-top:6px; margin-bottom:2px; border-bottom: 1px solid var(--border-color); padding-bottom: 4px; display:flex; justify-content:space-between; align-items:center;">
-                            全程(A→B)平滑过渡
-                            <label style="display:flex;align-items:center;gap:4px;font-weight:normal;color:var(--text-primary);cursor:pointer;">
-                                <input type="checkbox" id="rop-anim-dest-enabled"> 启用
-                            </label>
+                        <!-- ═══ A→B 位移动画 ═══ -->
+                        <div style="grid-column: span 2; font-size:12px; color:var(--accent); margin-top:8px; margin-bottom:2px; border-bottom: 1px solid var(--border-color); padding-bottom: 4px; display:flex; justify-content:space-between; align-items:center;">
+                            🎬 A→B 位移动画
+                            <div style="display:flex;align-items:center;gap:6px;">
+                                <button id="rop-anim-preview-end" class="btn btn-secondary" style="padding:1px 8px;font-size:11px;border-radius:4px;" title="切换预览终点位置">👁 预览终点</button>
+                                <label style="display:flex;align-items:center;gap:4px;font-weight:normal;color:var(--text-primary);cursor:pointer;">
+                                    <input type="checkbox" id="rop-anim-dest-enabled"> 启用
+                                </label>
+                            </div>
                         </div>
-                        <label>终点位置X</label><input type="number" id="rop-anim-end-x" class="rop-input" step="1">
-                        <label>终点位置Y</label><input type="number" id="rop-anim-end-y" class="rop-input" step="1">
+                        <div style="grid-column: span 2; font-size:11px; color:var(--text-muted); margin-bottom:4px;">从起点坐标平滑移动到终点坐标，需要点击▶播放预览查看效果</div>
+                        <label>缓动</label>
+                        <select id="rop-anim-easing" class="rop-select">
+                            <option value="ease_in_out_quad">缓入缓出</option>
+                            <option value="ease_out_quad">仅缓出</option>
+                            <option value="ease_in_quad">仅缓入</option>
+                            <option value="linear">线性</option>
+                            <option value="ease_out_expo">快速缓出</option>
+                            <option value="ease_in_out_expo">快速缓入缓出</option>
+                        </select>
+                        <label>控制方式</label>
+                        <select id="rop-anim-timing-mode" class="rop-select">
+                            <option value="duration">按时长</option>
+                            <option value="speed">按速度</option>
+                        </select>
+                        <label>移动时长(s)</label><input type="number" id="rop-anim-duration" class="rop-input" step="0.01" min="0" title="0=自动使用覆层结束时间-开始时间；大于0=按指定秒数从A移动到B">
+                        <label>移动速度(px/s)</label><input type="number" id="rop-anim-speed" class="rop-input" step="1" min="0" title="按速度模式下生效；0=回退到按时长">
+                        <div style="grid-column: span 2; display:grid; grid-template-columns: 58px 1fr 1fr; gap:6px; align-items:center;">
+                            <label style="font-size:12px;color:var(--text-secondary);">起点</label>
+                            <input type="number" id="rop-anim-start-x" class="rop-input" step="1" title="起点 X，媒体/文本为相对画布中心的中心点偏移">
+                            <input type="number" id="rop-anim-start-y" class="rop-input" step="1" title="起点 Y，媒体/文本为相对画布中心的中心点偏移">
+                        </div>
+                        <div style="grid-column: span 2; display:grid; grid-template-columns: 58px 1fr 1fr; gap:6px; align-items:center;">
+                            <label style="font-size:12px;color:var(--text-secondary);">终点</label>
+                            <input type="number" id="rop-anim-end-x" class="rop-input" step="1" title="终点 X，媒体/文本为相对画布中心的中心点偏移">
+                            <input type="number" id="rop-anim-end-y" class="rop-input" step="1" title="终点 Y，媒体/文本为相对画布中心的中心点偏移">
+                        </div>
+                        <label>起点缩放%</label>
+                        <div style="display:flex;align-items:center;gap:6px;">
+                            <input type="range" id="rop-anim-start-scale" class="rop-range" min="10" max="1000" value="100" style="flex:1;">
+                            <span id="rop-anim-start-scale-val" style="min-width:36px;text-align:right;font-size:12px;color:var(--text-muted);">100%</span>
+                        </div>
                         <label>终点缩放%</label>
                         <div style="display:flex;align-items:center;gap:6px;">
                             <input type="range" id="rop-anim-end-scale" class="rop-range" min="10" max="1000" value="100" style="flex:1;">
@@ -262,6 +296,8 @@ class ReelsOverlayPanel {
                 <div id="rop-image-props" class="rop-group" style="display:none;">
                     <div class="rop-group-title">媒体(图/视/动图)</div>
                     <div class="rop-grid">
+                        <label>视频起始秒</label><input type="number" id="rop-video-offset" class="rop-input" step="0.1" min="0" value="0" title="从视频的第几秒开始播放">
+                        <label>保持比例</label><input type="checkbox" id="rop-keep-aspect" checked>
                         <label>水平翻转</label><input type="checkbox" id="rop-flip-h">
                         <label>垂直翻转</label><input type="checkbox" id="rop-flip-v">
                         <label>混合模式</label>
@@ -789,6 +825,21 @@ class ReelsOverlayPanel {
             });
         }
 
+        // "预览终点" toggle for A→B animation
+        const animPreviewEndBtn = this.container.querySelector('#rop-anim-preview-end');
+        if (animPreviewEndBtn) {
+            animPreviewEndBtn.addEventListener('click', () => {
+                const active = animPreviewEndBtn.classList.toggle('active');
+                animPreviewEndBtn.style.background = active ? '#7b8bef' : '';
+                animPreviewEndBtn.style.color = active ? '#fff' : '';
+                animPreviewEndBtn.textContent = active ? '👁 终点预览中' : '👁 预览终点';
+                // Set flag on the selected overlay for renderer
+                if (this._selectedOv) {
+                    this._selectedOv._previewAtEnd = active;
+                }
+            });
+        }
+
         // Overlay group presets
         this.container.querySelector('#rop-group-preset-save')?.addEventListener('click', () => this._saveOverlayGroupPreset());
         this.container.querySelector('#rop-group-preset-load')?.addEventListener('click', () => this._loadOverlayGroupPreset());
@@ -911,10 +962,10 @@ class ReelsOverlayPanel {
             'rop-x', 'rop-y', 'rop-w', 'rop-h', 'rop-rotation', 'rop-opacity',
             'rop-start', 'rop-end', 'rop-content', 'rop-font', 'rop-fontsize',
             'rop-color', 'rop-bold', 'rop-font-weight', 'rop-stroke-color', 'rop-stroke-width',
-            'rop-shadow-color', 'rop-shadow-blur', 'rop-scale', 'rop-flip-h',
+            'rop-shadow-color', 'rop-shadow-blur', 'rop-scale', 'rop-flip-h', 'rop-video-offset', 'rop-keep-aspect',
             'rop-flip-v', 'rop-blend', 'rop-anim-in', 'rop-anim-out',
             'rop-anim-in-dur', 'rop-anim-out-dur',
-            'rop-anim-dest-enabled', 'rop-anim-end-x', 'rop-anim-end-y', 'rop-anim-end-scale',
+            'rop-anim-dest-enabled', 'rop-anim-easing', 'rop-anim-timing-mode', 'rop-anim-duration', 'rop-anim-speed', 'rop-anim-start-x', 'rop-anim-start-y', 'rop-anim-end-x', 'rop-anim-end-y', 'rop-anim-start-scale', 'rop-anim-end-scale',
             // Text card fields
             'rop-card-enabled',
             'rop-card-color', 'rop-card-opacity', 'rop-radius-all',
@@ -976,6 +1027,21 @@ class ReelsOverlayPanel {
             el.addEventListener('input', () => this._syncToOverlay());
             el.addEventListener('change', () => this._syncToOverlay());
         }
+        const animTimingBindings = [
+            ['rop-anim-duration', 'duration'],
+            ['rop-anim-speed', 'speed'],
+            ['rop-anim-timing-mode', 'mode'],
+            ['rop-anim-start-x', 'points'],
+            ['rop-anim-start-y', 'points'],
+            ['rop-anim-end-x', 'points'],
+            ['rop-anim-end-y', 'points'],
+        ];
+        for (const [fid, source] of animTimingBindings) {
+            const el = this.container.querySelector('#' + fid);
+            if (!el) continue;
+            el.addEventListener('input', () => this._syncAnimTimingFields(source));
+            el.addEventListener('change', () => this._syncAnimTimingFields(source));
+        }
 
         // 自动适配模式下：文字位置Y 与 上下边距互斥
         const autoFitEl = this.container.querySelector('#rop-auto-fit');
@@ -1021,6 +1087,11 @@ class ReelsOverlayPanel {
         const scVal = this.container.querySelector('#rop-scale-val');
         if (scSlider && scVal) {
             scSlider.addEventListener('input', () => { scVal.textContent = scSlider.value + '%'; });
+        }
+        const animStartScaleSlider = this.container.querySelector('#rop-anim-start-scale');
+        const animStartScaleVal = this.container.querySelector('#rop-anim-start-scale-val');
+        if (animStartScaleSlider && animStartScaleVal) {
+            animStartScaleSlider.addEventListener('input', () => { animStartScaleVal.textContent = animStartScaleSlider.value + '%'; });
         }
         const animEndScaleSlider = this.container.querySelector('#rop-anim-end-scale');
         const animEndScaleVal = this.container.querySelector('#rop-anim-end-scale-val');
@@ -1946,9 +2017,20 @@ class ReelsOverlayPanel {
 
     selectOverlay(ov) {
         // 清除之前选中的标记
-        if (this._selectedOv) this._selectedOv._selected = false;
+        if (this._selectedOv) {
+            this._selectedOv._selected = false;
+            this._selectedOv._previewAtEnd = false; // 切换时关闭终点预览
+        }
         this._selectedOv = ov;
         ov._selected = true;
+        // 重置"预览终点"按钮
+        const animPreviewBtn = this.container.querySelector('#rop-anim-preview-end');
+        if (animPreviewBtn) {
+            animPreviewBtn.classList.remove('active');
+            animPreviewBtn.style.background = '';
+            animPreviewBtn.style.color = '';
+            animPreviewBtn.textContent = '👁 预览终点';
+        }
         this.container.querySelector('#rop-props').style.display = 'block';
         this.container.querySelector('#rop-text-props').style.display = ov.type === 'text' ? 'block' : 'none';
         this.container.querySelector('#rop-image-props').style.display = (ov.type === 'image' || ov.type === 'video') ? 'block' : 'none';
@@ -2005,6 +2087,13 @@ class ReelsOverlayPanel {
         const timeInTransform = this.container.querySelector('#rop-time-in-transform');
         const hideTime = isScroll || ov.type === 'textcard';
         if (timeInTransform) timeInTransform.style.display = hideTime ? 'none' : 'contents';
+
+        // 媒体覆层（image/video）自动展开变换面板，方便设置位置和 A→B 过渡
+        if (isImg && transformGroup && transformGroup.classList.contains('rop-collapsed')) {
+            transformGroup.classList.remove('rop-collapsed');
+            const icon = transformGroup.querySelector('.rop-collapse-icon');
+            if (icon) icon.textContent = '▾';
+        }
 
         this._syncFromOverlay(ov);
         this._refreshList();
@@ -2150,14 +2239,34 @@ class ReelsOverlayPanel {
         this._val('rop-scroll-start-time', ov.start);
         this._val('rop-scroll-end-time', displayEnd);
 
-        // Animation
+        // Animation: A/B 坐标使用当前面板同一套坐标语义。
+        // 普通媒体/文本/文字卡片是中心点，scroll 是裁切区域左上角。
+        const currentAnimX = this._get('rop-x') ?? 0;
+        const currentAnimY = this._get('rop-y') ?? 0;
+        const animStartX = Number.isFinite(parseFloat(ov.anim_start_x)) ? parseFloat(ov.anim_start_x) : currentAnimX;
+        const animStartY = Number.isFinite(parseFloat(ov.anim_start_y)) ? parseFloat(ov.anim_start_y) : currentAnimY;
+        const animEndX = Number.isFinite(parseFloat(ov.anim_end_x)) ? parseFloat(ov.anim_end_x) : animStartX;
+        const animEndY = Number.isFinite(parseFloat(ov.anim_end_y)) ? parseFloat(ov.anim_end_y) : animStartY;
         this._val('rop-anim-dest-enabled', !!ov.anim_dest_enabled);
-        this._val('rop-anim-end-x', ov.anim_end_x ?? 0);
-        this._val('rop-anim-end-y', ov.anim_end_y ?? 0);
-        const animEndScalePct = Math.round((ov.anim_end_scale ?? 1) * 100);
+        this._val('rop-anim-easing', ov.anim_easing || 'ease_in_out_quad');
+        this._val('rop-anim-timing-mode', ov.anim_timing_mode || 'duration');
+        this._val('rop-anim-duration', ov.anim_duration ?? 0);
+        this._val('rop-anim-speed', ov.anim_speed ?? 0);
+        this._val('rop-anim-start-x', animStartX);
+        this._val('rop-anim-start-y', animStartY);
+        this._val('rop-anim-end-x', animEndX);
+        this._val('rop-anim-end-y', animEndY);
+        // anim_start_scale / anim_end_scale 存储为百分比整数（100 = 100%）
+        const animStartScalePct = Math.round(ov.anim_start_scale ?? 100);
+        this._val('rop-anim-start-scale', animStartScalePct);
+        const animStartScaleValEl = this.container.querySelector('#rop-anim-start-scale-val');
+        if (animStartScaleValEl) animStartScaleValEl.textContent = animStartScalePct + '%';
+        const animEndScalePct = Math.round(ov.anim_end_scale ?? 100);
         this._val('rop-anim-end-scale', animEndScalePct);
         const animEndScaleValEl = this.container.querySelector('#rop-anim-end-scale-val');
         if (animEndScaleValEl) animEndScaleValEl.textContent = animEndScalePct + '%';
+        // 更新 A 点参考标签
+        this._updateAnimStartRef();
 
         if (ov.type === 'text') {
             this._val('rop-content', ov.content || '');
@@ -2182,6 +2291,8 @@ class ReelsOverlayPanel {
             this._val('rop-flip-h', ov.flip_x || false);
             this._val('rop-flip-v', ov.flip_y || false);
             this._val('rop-blend', ov.blend_mode || 'source-over');
+            this._val('rop-video-offset', ov.video_start_offset || 0);
+            this._val('rop-keep-aspect', ov.keep_aspect !== false);
         }
 
         if (ov.type === 'textcard') {
@@ -2385,11 +2496,53 @@ class ReelsOverlayPanel {
 
         // Fixed text flag
         this._val('rop-fixed-text', ov.fixed_text || false);
+        this._syncAnimTimingFields('mode', false);
+    }
+
+    /** A→B 起点字段现已独立，无需镜像同步 */
+    _updateAnimStartRef() {
+        // 起点X/Y/缩放已改为独立可编辑，不再自动同步
+    }
+
+    _syncAnimTimingFields(source = 'mode', syncOverlay = true) {
+        if (!this._selectedOv) return;
+        const modeEl = this.container.querySelector('#rop-anim-timing-mode');
+        const durationEl = this.container.querySelector('#rop-anim-duration');
+        const speedEl = this.container.querySelector('#rop-anim-speed');
+        if (!modeEl || !durationEl || !speedEl) return;
+
+        if (source === 'duration') modeEl.value = 'duration';
+        if (source === 'speed') modeEl.value = 'speed';
+
+        const sx = parseFloat(this._get('rop-anim-start-x'));
+        const sy = parseFloat(this._get('rop-anim-start-y'));
+        const ex = parseFloat(this._get('rop-anim-end-x'));
+        const ey = parseFloat(this._get('rop-anim-end-y'));
+        if (![sx, sy, ex, ey].every(Number.isFinite)) return;
+
+        const distance = Math.hypot(ex - sx, ey - sy);
+        if (!(distance > 0)) return;
+
+        const mode = modeEl.value || 'duration';
+        const duration = parseFloat(durationEl.value) || 0;
+        const speed = parseFloat(speedEl.value) || 0;
+        const roundDuration = (v) => Math.round(v * 1000) / 1000;
+        const roundSpeed = (v) => Math.round(v * 100) / 100;
+
+        if ((source === 'speed' || mode === 'speed') && speed > 0) {
+            durationEl.value = String(roundDuration(distance / speed));
+        } else if ((source === 'duration' || mode === 'duration' || source === 'points') && duration > 0) {
+            speedEl.value = String(roundSpeed(distance / duration));
+        }
+
+        if (syncOverlay) this._syncToOverlay();
     }
 
     _syncToOverlay() {
         const ov = this._selectedOv;
         if (!ov) return;
+        // 同步后更新 A 点参考
+        setTimeout(() => this._updateAnimStartRef(), 0);
 
         if (ov.type === 'textcard') {
             ov.w = this._get('rop-card-width');
@@ -2432,9 +2585,22 @@ class ReelsOverlayPanel {
         }
         
         ov.anim_dest_enabled = !!this._get('rop-anim-dest-enabled');
-        ov.anim_end_x = parseFloat(this._get('rop-anim-end-x'));
-        ov.anim_end_y = parseFloat(this._get('rop-anim-end-y'));
-        ov.anim_end_scale = parseFloat(this._get('rop-anim-end-scale'));
+        ov.anim_easing = this._get('rop-anim-easing') || 'ease_in_out_quad';
+        ov.anim_timing_mode = this._get('rop-anim-timing-mode') || 'duration';
+        ov.anim_duration = Math.max(0, parseFloat(this._get('rop-anim-duration')) || 0);
+        ov.anim_speed = Math.max(0, parseFloat(this._get('rop-anim-speed')) || 0);
+        const currentAnimX = ov.type === 'textcard' ? this._get('rop-card-x') : this._get('rop-x');
+        const currentAnimY = ov.type === 'textcard' ? this._get('rop-card-y') : this._get('rop-y');
+        const readAnimNumber = (id, fallback) => {
+            const val = parseFloat(this._get(id));
+            return Number.isFinite(val) ? val : fallback;
+        };
+        ov.anim_start_x = readAnimNumber('rop-anim-start-x', currentAnimX || 0);
+        ov.anim_start_y = readAnimNumber('rop-anim-start-y', currentAnimY || 0);
+        ov.anim_end_x = readAnimNumber('rop-anim-end-x', ov.anim_start_x);
+        ov.anim_end_y = readAnimNumber('rop-anim-end-y', ov.anim_start_y);
+        ov.anim_start_scale = readAnimNumber('rop-anim-start-scale', 100);
+        ov.anim_end_scale = readAnimNumber('rop-anim-end-scale', ov.anim_start_scale);
 
         if (ov.type === 'text') {
             ov.content = this._get('rop-content');
@@ -2455,6 +2621,8 @@ class ReelsOverlayPanel {
             ov.flip_x = this._get('rop-flip-h');
             ov.flip_y = this._get('rop-flip-v');
             ov.blend_mode = this._get('rop-blend');
+            ov.video_start_offset = parseFloat(this._get('rop-video-offset')) || 0;
+            ov.keep_aspect = this._get('rop-keep-aspect');
         }
 
         if (ov.type === 'textcard') {

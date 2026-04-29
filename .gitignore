@@ -83,3 +83,4 @@ vendor/face_detection/
 codeql-db/
 *.sarif
 electron/pipe_frames.raw
+.codeql-db/

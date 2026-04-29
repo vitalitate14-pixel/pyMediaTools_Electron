@@ -711,8 +711,8 @@ function _clientToCanvas(clientX, clientY) {
 
 /** Get the bounding box of an overlay in canvas coords */
 function _ovGetBounds(ov) {
-    const x = parseFloat(ov.x || 0);
     const w = parseFloat(ov.w || 100);
+    let x = parseFloat(ov.x || 0);
     let y, h;
     if (ov.type === 'textcard' && ov._renderedY != null) {
         y = ov._renderedY;
@@ -720,6 +720,44 @@ function _ovGetBounds(ov) {
     } else {
         y = parseFloat(ov.y || 0);
         h = parseFloat(ov.h || 100);
+    }
+    if (ov.anim_dest_enabled && ov.type !== 'scroll') {
+        const start = parseFloat(ov.start || 0);
+        const end = parseFloat(ov.end || 0);
+        if (end > start) {
+            const canvas = document.getElementById('reels-preview-canvas');
+            const canvasW = (canvas && canvas.width) ? canvas.width : 1080;
+            const canvasH = (canvas && canvas.height) ? canvas.height : 1920;
+            const readAnimNumber = (value, fallback) => {
+                const n = parseFloat(value);
+                return Number.isFinite(n) ? n : fallback;
+            };
+            const fallbackStartX = (x + w / 2) - canvasW / 2;
+            const fallbackStartY = (y + h / 2) - canvasH / 2;
+            const startPointX = readAnimNumber(ov.anim_start_x, fallbackStartX);
+            const startPointY = readAnimNumber(ov.anim_start_y, fallbackStartY);
+            const endPointX = readAnimNumber(ov.anim_end_x, startPointX);
+            const endPointY = readAnimNumber(ov.anim_end_y, startPointY);
+            const fallbackDuration = (end >= 9999) ? 5.0 : (end - start);
+            const explicitDuration = parseFloat(ov.anim_duration || 0);
+            const speed = parseFloat(ov.anim_speed || 0);
+            const distance = Math.hypot(endPointX - startPointX, endPointY - startPointY);
+            const animDuration = (ov.anim_timing_mode === 'speed' && speed > 0)
+                ? Math.max(0.001, distance / speed)
+                : (explicitDuration > 0 ? explicitDuration : fallbackDuration);
+            const now = (typeof _getPreviewCurrentTime === 'function') ? _getPreviewCurrentTime() : start;
+            let p = Math.max(0, Math.min(1, (now - start) / Math.max(0.001, animDuration)));
+            if (ov._previewAtEnd) p = 1;
+            const easingName = ov.anim_easing || 'ease_in_out_quad';
+            const easingFn = window.ReelsAnimEngine
+                ? (window.ReelsAnimEngine.EASING_MAP[easingName] || window.ReelsAnimEngine.EASING_MAP.ease_in_out_quad)
+                : null;
+            const easedP = easingFn ? easingFn(p) : p;
+            const pointX = startPointX + (endPointX - startPointX) * easedP;
+            const pointY = startPointY + (endPointY - startPointY) * easedP;
+            x = canvasW / 2 + pointX - w / 2;
+            y = canvasH / 2 + pointY - h / 2;
+        }
     }
     return { x, y, w, h };
 }
@@ -1354,13 +1392,21 @@ function _isStyleApplyAllEnabled() {
     return el ? el.checked !== false : true;
 }
 
+function _getNamedSubtitlePresetStyle(name) {
+    if (!name || !window.ReelsStyleEngine) return null;
+    const data = ReelsStyleEngine.loadSubtitlePresets();
+    if (!data.presets || !(name in data.presets)) return null;
+    return ReelsStyleEngine.applySubtitlePreset(name);
+}
+
 function _resolveSubtitleStyleForTask(task) {
     const globalStyle = _reelsState.globalSubtitleStyle;
     // ── 最高优先级：批量表格中设置的字幕模板预设 ──
     // 即使 applyAll 开启，任务级别的显式预设也应该生效
     if (task && task._subtitlePreset && window.ReelsStyleEngine) {
-        const presetStyle = ReelsStyleEngine.applySubtitlePreset(task._subtitlePreset);
+        const presetStyle = _getNamedSubtitlePresetStyle(task._subtitlePreset);
         if (presetStyle) return presetStyle;
+        task._subtitlePreset = '';
     }
     if (_isStyleApplyAllEnabled()) {
         return _cloneSubtitleStyle(globalStyle) || _readStyleFromUI();
@@ -2626,6 +2672,17 @@ function _isImagePath(filePath) {
 function _getSelectedTask() {
     if (_reelsState.selectedIdx < 0) return null;
     return _reelsState.tasks[_reelsState.selectedIdx] || null;
+}
+
+function _syncCurrentOverlayEditorToSelectedTask() {
+    const task = _getSelectedTask();
+    const mgr = _reelsState.overlayProxy && _reelsState.overlayProxy.overlayMgr;
+    if (!task || !mgr) return;
+    if (_reelsState._coverEditMode && task.cover) {
+        task.cover.overlays = [...(mgr.overlays || [])];
+    } else {
+        task.overlays = [...(mgr.overlays || [])];
+    }
 }
 
 function _toPlayablePath(filePath, srcUrl = null) {
@@ -4090,9 +4147,10 @@ function reelsSelectTask(idx) {
     const taskStyle = _resolveSubtitleStyleForTask(task);
     if (taskStyle) _writeStyleToUI(taskStyle);
     
-    // Sync subtitle preset UI with the selected task
-    const defaultPreset = localStorage.getItem(REELS_DEFAULT_PRESET_KEY) || '';
-    const presetName = task._subtitlePreset || defaultPreset || '';
+    // Sync subtitle preset UI with the selected task. Do not fall back to the
+    // default preset here: after manual edits, an empty task preset means the
+    // task is using the current custom/global style, not the saved default.
+    const presetName = task._subtitlePreset || '';
     const hiddenInput = document.getElementById('reels-preset-select');
     if (hiddenInput) hiddenInput.value = presetName;
     const selectTrigger = document.getElementById('reels-preset-select-trigger');
@@ -4727,6 +4785,16 @@ function reelsOpenSubtitlePresetPicker(anchorEl) {
     window._openStyledPresetPicker(anchorEl, currentVal, (selectedVal) => {
         if (hiddenInput) {
             hiddenInput.value = selectedVal || '';
+            
+            // Sync the selected preset to the task objects
+            const applyAll = typeof _isStyleApplyAllEnabled === 'function' ? _isStyleApplyAllEnabled() : true;
+            if (applyAll && _reelsState.tasks) {
+                _reelsState.tasks.forEach(t => t._subtitlePreset = selectedVal || '');
+            } else {
+                const t = _getSelectedTask();
+                if (t) t._subtitlePreset = selectedVal || '';
+            }
+
             // Trigger the same logic as the old onchange event if necessary
             if (typeof reelsLoadPresetQuick === 'function') {
                 reelsLoadPresetQuick();
@@ -4868,7 +4936,12 @@ function reelsLoadPreset(silent = false) {
     const name = select.value;
     if (!name) { if (!silent) alert('请先选择一个预设'); return; }
     if (window.ReelsStyleEngine) {
-        const style = ReelsStyleEngine.applySubtitlePreset(name);
+        const style = _getNamedSubtitlePresetStyle(name);
+        if (!style) {
+            select.value = '';
+            if (!silent) alert(`预设不存在或已删除：${name}`);
+            return;
+        }
         _reelsState.style = Object.assign({}, _reelsState.style || {}, style);
         _writeStyleToUI(style);
         reelsUpdatePreview();
@@ -5181,10 +5254,7 @@ async function reelsStartExport() {
     }
 
     // ── 导出前同步当前任务的覆层（用户可能删除/修改了覆层但尚未切换任务） ──
-    const curTask = _reelsState.tasks[_reelsState.selectedIdx];
-    if (curTask && _reelsState.overlayProxy && _reelsState.overlayProxy.overlayMgr) {
-        curTask.overlays = [...(_reelsState.overlayProxy.overlayMgr.overlays || [])];
-    }
+    _syncCurrentOverlayEditorToSelectedTask();
 
     // 导出前自动对齐未对齐的 TXT 任务
     if (workMode !== 'srt') {
@@ -5223,39 +5293,48 @@ async function reelsStartExport() {
                 String(ov.scroll_body || '').trim()
             )
         );
+        // 有任意覆层（包括图片/视频覆层，无需文字内容）
+        const hasAnyOverlay = Array.isArray(t.overlays) && t.overlays.some(ov => ov && !ov.disabled);
 
         if (workMode === 'voiced_bg') {
             // 带声视频模式：需要背景 + (字幕 或 文字卡片)
-            if (!hasBg || (!hasSub && !hasOverlay)) {
-                const missing = [];
-                if (!hasBg) missing.push('带声视频');
-                if (!hasSub && !hasOverlay) missing.push('字幕(需先对齐)');
-                invalidTasks.push(`${idx + 1}. ${(t.fileName || t.baseName || '未命名任务')} 缺少: ${missing.join(' + ')}`);
+            // 但如果只有背景视频（无字幕无覆层），也允许导出（直出视频）
+            if (!hasBg) {
+                invalidTasks.push(`${idx + 1}. ${(t.fileName || t.baseName || '未命名任务')} 缺少: 带声视频`);
                 return false;
             }
             return true;
         }
 
         // SRT 模式和配音+文本模式
-        // 有文字卡片时不要求字幕
-        if ((!hasSub && !hasOverlay) || !hasBg) {
-            const missing = [];
-            if (!hasBg) missing.push('背景');
-            if (!hasSub && !hasOverlay) missing.push(workMode === 'dubbed_text' ? '字幕(需先对齐)' : '字幕');
-            invalidTasks.push(`${idx + 1}. ${(t.fileName || t.baseName || '未命名任务')} 缺少: ${missing.join(' + ')}`);
+        // 允许导出条件放宽：有背景即可（无字幕时导出纯视频+覆层）
+        if (!hasBg) {
+            invalidTasks.push(`${idx + 1}. ${(t.fileName || t.baseName || '未命名任务')} 缺少: 背景`);
             return false;
         }
-        if (hasVoice) return true;
-        // 有文字卡片但无配音/字幕，也允许导出（图片背景时需要文字卡片来确定时长）
-        if (hasOverlay && !hasSub && !hasVoice) {
-            return true;
+        // 有字幕、有文字覆层、有任意覆层 => 直接通过
+        if (hasSub || hasOverlay || hasAnyOverlay) {
+            if (hasVoice) return true;
+            // 有文字卡片但无配音/字幕，也允许导出
+            if ((hasOverlay || hasAnyOverlay) && !hasSub && !hasVoice) {
+                return true;
+            }
+            // 无配音时仅兼容视频背景（旧模式）
+            const allowNoVoice = !_isImagePath(bgPath);
+            if (!allowNoVoice) {
+                invalidTasks.push(`${idx + 1}. ${(t.fileName || t.baseName || '未命名任务')} 缺少: 人声音频`);
+            }
+            return allowNoVoice;
         }
-        // 无配音时仅兼容视频背景（旧模式）；图片背景需要配音来确定时长。
-        const allowNoVoice = !_isImagePath(bgPath);
-        if (!allowNoVoice) {
-            invalidTasks.push(`${idx + 1}. ${(t.fileName || t.baseName || '未命名任务')} 缺少: 人声音频`);
+        // 无字幕 + 无覆层：视频背景允许直出，图片背景需配音确定时长
+        if (!_isImagePath(bgPath)) {
+            return true; // 视频背景直出
         }
-        return allowNoVoice;
+        if (hasVoice) {
+            return true; // 有配音可以确定时长
+        }
+        invalidTasks.push(`${idx + 1}. ${(t.fileName || t.baseName || '未命名任务')} 缺少: 字幕或人声音频`);
+        return false;
     });
     if (tasks.length === 0) {
         const extra = invalidTasks.length > 0 ? `\n\n任务问题:\n${invalidTasks.slice(0, 8).join('\n')}` : '';
@@ -5409,7 +5488,9 @@ async function reelsStartExport() {
                 
                 // 策略4: 从批量表格的素材文件夹 materialDir 中搜索
                 if (!fixedPath && typeof _batchTableState !== 'undefined' && _batchTableState.tabs) {
-                    const activeTab = _batchTableState.tabs[_batchTableState.activeIdx || 0];
+                    const activeTab = (typeof _getActiveTab === 'function')
+                        ? _getActiveTab()
+                        : (_batchTableState.tabs.find(t => t.id === _batchTableState.activeTabId) || _batchTableState.tabs[0]);
                     const matDir = activeTab?.materialDir;
                     if (matDir) {
                         // 拼接 materialDir + bareFileName
@@ -5492,8 +5573,8 @@ async function reelsStartExport() {
                     targetWidth: 1080,
                     targetHeight: 1920,
                     fps: 30,
-                    voiceVolume: (workMode === 'voiced_bg' && !task.audioPath) ? bgVolume / 100 : voiceVolume / 100,
-                    bgVolume: bgVolume / 100,
+                    voiceVolume: (workMode === 'voiced_bg' && !task.audioPath) ? (task.bgVideoVolume != null ? task.bgVideoVolume : bgVolume) / 100 : voiceVolume / 100,
+                    bgVolume: (task.bgVideoVolume != null ? task.bgVideoVolume : bgVolume) / 100,
                     loopFade,
                     loopFadeDur,
                     customDuration: task.customDuration || customDuration || 0,
@@ -5674,8 +5755,8 @@ async function reelsStartExport() {
                                 contentVideoVolume: (task.contentVideoVolume != null ? task.contentVideoVolume : 100) / 100,
                                 voicePath: voiceSource || null,
                                 targetWidth: 1080, targetHeight: 1920, fps: 30,
-                                voiceVolume: (workMode === 'voiced_bg' && !task.audioPath) ? bgVolume / 100 : voiceVolume / 100,
-                                bgVolume: bgVolume / 100,
+                                voiceVolume: (workMode === 'voiced_bg' && !task.audioPath) ? (task.bgVideoVolume != null ? task.bgVideoVolume : bgVolume) / 100 : voiceVolume / 100,
+                                bgVolume: (task.bgVideoVolume != null ? task.bgVideoVolume : bgVolume) / 100,
                                 loopFade, loopFadeDur,
                                 bgmPath: task.bgmPath || '',
                                 bgmVolume: (task.bgmVolume != null ? task.bgmVolume : 10) / 100,
@@ -5742,8 +5823,8 @@ async function reelsStartExport() {
                     targetHeight: 1920,
                     fps: 30,
                     // voiced_bg 模式: 背景音频作为主音轨，用 bgVolume 控制
-                    voiceVolume: (workMode === 'voiced_bg' && !task.audioPath) ? bgVolume / 100 : voiceVolume / 100,
-                    bgVolume: bgVolume / 100,
+                    voiceVolume: (workMode === 'voiced_bg' && !task.audioPath) ? (task.bgVideoVolume != null ? task.bgVideoVolume : bgVolume) / 100 : voiceVolume / 100,
+                    bgVolume: (task.bgVideoVolume != null ? task.bgVideoVolume : bgVolume) / 100,
                     loopFade,
                     loopFadeDur,
                     customDuration: task.customDuration || customDuration || 0,
@@ -5804,7 +5885,7 @@ async function reelsStartExport() {
                     loop_fade: loopFade,
                     loop_fade_dur: loopFadeDur,
                     voice_volume: voiceVolume / 100,
-                    bg_volume: bgVolume / 100,
+                    bg_volume: (task.bgVideoVolume != null ? task.bgVideoVolume : bgVolume) / 100,
                     bgm_path: task.bgmPath || '',
                     bgm_volume: (task.bgmVolume != null ? task.bgmVolume : 10) / 100,
                 });
@@ -6053,8 +6134,11 @@ function reelsExportSRT() {
 // Project Management
 // ═══════════════════════════════════════════════════════
 
-function reelsSaveProject() {
-    if (!window.ReelsProject) { alert('项目管理模块未加载'); return; }
+/**
+ * 收集当前工程状态（供模板系统调用）
+ */
+function collectCurrentProjectState() {
+    _syncCurrentOverlayEditorToSelectedTask();
     const style = _readStyleFromUI();
     _persistSubtitleStyleByScope(style);
     const globalStyle = _cloneSubtitleStyle(_reelsState.globalSubtitleStyle) || style;
@@ -6078,22 +6162,34 @@ function reelsSaveProject() {
         audioFxTarget: (document.getElementById('reels-audio-fx-target') || {}).value || 'all',
         subtitleStyleApplyAll: _isStyleApplyAllEnabled(),
     };
-    ReelsProject.saveProject({
+    return {
         tasks: _reelsState.tasks,
         style: globalStyle,
         exportOpts,
         selectedIdx: _reelsState.selectedIdx,
-    });
+    };
 }
 
-async function reelsLoadProject() {
-    if (!window.ReelsProject) { alert('项目管理模块未加载'); return; }
-    const result = await ReelsProject.loadProject();
+/**
+ * 从模板/项目数据恢复工程状态（供模板系统调用）
+ */
+function applyRestoredProject(result) {
     if (!result) return;
 
     // 恢复任务
-    _reelsState.tasks = result.tasks;
-    _reelsState.selectedIdx = result.selectedIdx >= 0 ? result.selectedIdx : 0;
+    _reelsState.tasks = Array.isArray(result.tasks) ? result.tasks : [];
+    _reelsState.selectedIdx = _reelsState.tasks.length > 0
+        ? Math.max(0, Math.min(result.selectedIdx >= 0 ? result.selectedIdx : 0, _reelsState.tasks.length - 1))
+        : -1;
+    _reelsState.backgroundLibrary = [];
+    _ensureBackgroundLibraryFromTasks();
+
+    // Keep the batch-table active tab in sync so loaded template paths appear
+    // in the table as well as in the Reels task list.
+    if (typeof _batchTableState !== 'undefined' && typeof _getActiveTab === 'function') {
+        const tab = _getActiveTab();
+        if (tab) tab.tasks = _reelsState.tasks.map(t => ({ ...t }));
+    }
 
     // 恢复样式
     if (result.style && Object.keys(result.style).length > 0) {
@@ -6133,7 +6229,12 @@ async function reelsLoadProject() {
     const styleToShow = _resolveSubtitleStyleForTask(selectedTask);
     if (styleToShow) _writeStyleToUI(styleToShow);
 
-    _renderTaskList();
+    if (selectedTask) {
+        reelsSelectTask(_reelsState.selectedIdx);
+    } else {
+        _renderTaskList();
+    }
+    if (typeof _renderBatchTable === 'function') _renderBatchTable();
     _applyPreviewAudioMix();
     reelsUpdatePreview();
 
@@ -6142,6 +6243,47 @@ async function reelsLoadProject() {
     }
     const statusEl = document.getElementById('reels-export-status');
     if (statusEl) statusEl.textContent = `✅ 已加载 ${result.tasks.length} 个任务`;
+}
+
+function reelsSaveProject() {
+    if (!window.ReelsProject) { alert('项目管理模块未加载'); return; }
+    _syncCurrentOverlayEditorToSelectedTask();
+    const style = _readStyleFromUI();
+    _persistSubtitleStyleByScope(style);
+    const globalStyle = _cloneSubtitleStyle(_reelsState.globalSubtitleStyle) || style;
+    const exportOpts = {
+        outputDir: (document.getElementById('reels-output-dir') || {}).value || '',
+        quality: (document.getElementById('reels-quality') || {}).value || 'medium',
+        suffix: (document.getElementById('reels-suffix') || {}).value || '_subtitled',
+        voiceVolume: parseFloat((document.getElementById('reels-voice-volume') || {}).value || '100') || 100,
+        bgVolume: parseFloat((document.getElementById('reels-bg-volume') || {}).value || '5') || 5,
+        useGPU: (document.getElementById('reels-use-gpu') || {}).checked || false,
+        useMemoryDecoder: (document.getElementById('reels-use-memory-decoder') || {}).checked || false,
+        previewLoop: (document.getElementById('reels-preview-loop') || {}).checked !== false,
+        loopFade: (document.getElementById('reels-loop-fade') || {}).checked !== false,
+        loopFadeDuration: parseFloat((document.getElementById('reels-loop-fade-dur') || {}).value || '1') || 1,
+        introPath: (document.getElementById('reels-intro-path') || {}).value || '',
+        karaokeHighlight: (document.getElementById('reels-karaoke-hl') || {}).checked || false,
+        reverbEnabled: (document.getElementById('reels-reverb-enabled') || {}).checked || false,
+        reverbPreset: (document.getElementById('reels-reverb-preset') || {}).value || 'hall',
+        reverbMix: parseFloat((document.getElementById('reels-reverb-mix') || {}).value || '30') || 30,
+        stereoWidth: parseFloat((document.getElementById('reels-stereo-width') || {}).value || '100') || 100,
+        audioFxTarget: (document.getElementById('reels-audio-fx-target') || {}).value || 'all',
+        subtitleStyleApplyAll: _isStyleApplyAllEnabled(),
+    };
+    ReelsProject.saveProject({
+        tasks: _reelsState.tasks,
+        style: globalStyle,
+        exportOpts,
+        selectedIdx: _reelsState.selectedIdx,
+    });
+}
+
+async function reelsLoadProject() {
+    if (!window.ReelsProject) { alert('项目管理模块未加载'); return; }
+    const result = await ReelsProject.loadProject();
+    if (!result) return;
+    applyRestoredProject(result);
 }
 
 // ═══════════════════════════════════════════════════════
@@ -6226,3 +6368,45 @@ if (typeof MutationObserver !== 'undefined') {
         if (panel) observer.observe(panel, { attributes: true, attributeFilter: ['class'] });
     }, 500);
 }
+
+// ═══════════════════════════════════════════════════════
+// UI Interaction Hook for Style Overrides
+// ═══════════════════════════════════════════════════════
+function reelsMarkStyleDirty(e) {
+    const el = e.target;
+    if (!el || !el.closest) return;
+    if (
+        !el.closest('#reels-style-panel') &&
+        !el.closest('#reels-advanced-style-panel') &&
+        !el.closest('#inspector-tab-subtitle')
+    ) return;
+    
+    // Ignore non-style inputs
+    if (el.id === 'reels-style-apply-all' || el.id === 'reels-preset-select' || 
+        el.id === 'reels-subtitle-toggle' || el.id === 'reels-show-subtitle-range') return;
+
+    // User actively modified a style parameter, breaking the preset link
+    const applyAll = typeof _isStyleApplyAllEnabled === 'function' ? _isStyleApplyAllEnabled() : true;
+    let modified = false;
+    
+    if (applyAll && window._reelsState && window._reelsState.tasks) {
+        for (const t of window._reelsState.tasks) {
+            if (t._subtitlePreset) { t._subtitlePreset = ''; modified = true; }
+        }
+    } else {
+        const task = typeof _getSelectedTask === 'function' ? _getSelectedTask() : null;
+        if (task && task._subtitlePreset) { task._subtitlePreset = ''; modified = true; }
+    }
+
+    if (modified) {
+        const selectTrigger = document.getElementById('reels-preset-select-trigger');
+        const hiddenInput = document.getElementById('reels-preset-select');
+        if (hiddenInput) hiddenInput.value = '';
+        if (selectTrigger) {
+            const span = selectTrigger.querySelector('span');
+            if (span) span.textContent = '-- 自定义样式 --';
+        }
+    }
+}
+document.addEventListener('input', reelsMarkStyleDirty, true);
+document.addEventListener('change', reelsMarkStyleDirty, true);

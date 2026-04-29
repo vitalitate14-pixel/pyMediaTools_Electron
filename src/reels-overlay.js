@@ -92,6 +92,11 @@ function createImageOverlay(opts = {}) {
         blend_mode: opts.blend_mode || 'source-over',
         transition_preset: opts.transition_preset || 'none',
         transition_duration: opts.transition_duration || 0.35,
+        // 入/出场动画
+        anim_in_type: opts.anim_in_type || 'none',
+        anim_out_type: opts.anim_out_type || 'none',
+        anim_in_duration: opts.anim_in_duration || 0.3,
+        anim_out_duration: opts.anim_out_duration || 0.3,
     };
 }
 
@@ -618,8 +623,10 @@ function drawOverlay(ctx, ov, currentTime = 0, canvasW = 1920, canvasH = 1080) {
     // 时间范围检查 (允许边界值)
     // end >= 9999 = 全程，永不超时
     // scroll 覆层: 动画完成后保持在最终位置
-    if (currentTime < start) return;
-    if (end < 9999 && ov.type !== 'scroll' && currentTime > end + 0.001) {
+    // _previewAtEnd: 跳过时间检查，强制渲染终点位置
+    const isPreviewingEnd = ov._previewAtEnd && ov.anim_dest_enabled;
+    if (!isPreviewingEnd && currentTime < start) return;
+    if (!isPreviewingEnd && end < 9999 && ov.type !== 'scroll' && currentTime > end + 0.001) {
         // 对于 video/image 覆层，如果 end 恰好等于视频时长（被 9999 覆盖的遗留问题），也视为全程
         if ((ov.type === 'video' || ov.type === 'image') && end > 0) {
             // 允许继续绘制（循环播放）
@@ -631,23 +638,53 @@ function drawOverlay(ctx, ov, currentTime = 0, canvasW = 1920, canvasH = 1080) {
     let x = parseFloat(ov.x || 0);
     let y = parseFloat(ov.y || 0);
     let destScaleOffset = 1.0;
-
-    if (ov.anim_dest_enabled && end > start) {
-        const p = Math.max(0, Math.min(1, (currentTime - start) / (end - start)));
-        const easedP = window.ReelsAnimEngine ? window.ReelsAnimEngine.EASING_MAP['ease_in_out_quad'](p) : p;
-        
-        const endX = parseFloat(ov.anim_end_x ?? x);
-        const endY = parseFloat(ov.anim_end_y ?? y);
-        const endScale = parseFloat(ov.anim_end_scale ?? 100) / 100.0;
-        // The scale starts at 1.0 (relative to static scale), and goes to endScale
-        
-        x = x + (endX - x) * easedP;
-        y = y + (endY - y) * easedP;
-        destScaleOffset = 1.0 + (endScale - 1.0) * easedP;
-    }
-
     const w = parseFloat(ov.w || 100);
     const h = parseFloat(ov.h || 100);
+
+    if (ov.anim_dest_enabled && end > start) {
+        // A→B 面板坐标与普通位置控件保持一致：
+        // 媒体/文本/文字卡片使用“相对画布中心的中心点偏移”，scroll 使用左上角。
+        // 渲染内部统一转换为左上角。
+        const useCenterPoint = ov.type !== 'scroll';
+        const fallbackStartX = useCenterPoint ? (x + w / 2) - canvasW / 2 : x;
+        const fallbackStartY = useCenterPoint ? (y + h / 2) - canvasH / 2 : y;
+        const readAnimNumber = (value, fallback) => {
+            const n = parseFloat(value);
+            return Number.isFinite(n) ? n : fallback;
+        };
+        const startPointX = readAnimNumber(ov.anim_start_x, fallbackStartX);
+        const startPointY = readAnimNumber(ov.anim_start_y, fallbackStartY);
+        const endPointX = readAnimNumber(ov.anim_end_x, startPointX);
+        const endPointY = readAnimNumber(ov.anim_end_y, startPointY);
+        // 计算动画进度。支持按时长或按速度控制；
+        // 速度模式：时长 = A/B 距离 / px/s。
+        const fallbackDuration = (end >= 9999) ? 5.0 : (end - start);
+        const explicitDuration = parseFloat(ov.anim_duration || 0);
+        const speed = parseFloat(ov.anim_speed || 0);
+        const distance = Math.hypot(endPointX - startPointX, endPointY - startPointY);
+        const animDuration = (ov.anim_timing_mode === 'speed' && speed > 0)
+            ? Math.max(0.001, distance / speed)
+            : (explicitDuration > 0 ? explicitDuration : fallbackDuration);
+        let p = Math.max(0, Math.min(1, (currentTime - start) / Math.max(0.001, animDuration)));
+        // 预览终点模式：强制显示在终点位置
+        if (ov._previewAtEnd) p = 1;
+        const easingName = ov.anim_easing || 'ease_in_out_quad';
+        const easingFn = window.ReelsAnimEngine
+            ? (window.ReelsAnimEngine.EASING_MAP[easingName] || window.ReelsAnimEngine.EASING_MAP.ease_in_out_quad)
+            : null;
+        const easedP = easingFn ? easingFn(p) : p;
+        const startX = useCenterPoint ? canvasW / 2 + startPointX - w / 2 : startPointX;
+        const startY = useCenterPoint ? canvasH / 2 + startPointY - h / 2 : startPointY;
+        const endX = useCenterPoint ? canvasW / 2 + endPointX - w / 2 : endPointX;
+        const endY = useCenterPoint ? canvasH / 2 + endPointY - h / 2 : endPointY;
+        const startScale = readAnimNumber(ov.anim_start_scale, 100) / 100.0;
+        const endScale = readAnimNumber(ov.anim_end_scale, 100) / 100.0;
+        
+        x = startX + (endX - startX) * easedP;
+        y = startY + (endY - startY) * easedP;
+        destScaleOffset = startScale + (endScale - startScale) * easedP;
+    }
+
     const rotation = parseFloat(ov.rotation || 0);
     const opacity = parseFloat(ov.opacity ?? 255) / 255;
 
@@ -681,6 +718,49 @@ function drawOverlay(ctx, ov, currentTime = 0, canvasW = 1920, canvasH = 1080) {
     ctx.translate(-cx, -cy);
 
     ctx.globalAlpha = opacity * transOp;
+
+    // ── 入/出场动画（image/video/text 在此统一处理；textcard 有自己的特化实现）──
+    const inType = ov.anim_in_type || 'none';
+    const outType = ov.anim_out_type || 'none';
+    const _applySharedAnim = ov.type !== 'textcard' && ov.type !== 'scroll';
+    if (_applySharedAnim && window.ReelsAnimEngine && (inType !== 'none' || outType !== 'none')) {
+        const inDur = inType !== 'none' ? parseFloat(ov.anim_in_duration || 0.3) : 0;
+        const outDur = outType !== 'none' ? parseFloat(ov.anim_out_duration || 0.3) : 0;
+        const { inProgress, outProgress } = ReelsAnimEngine.computeAnimProgress(
+            currentTime, start, end, inDur, outDur
+        );
+
+        // 淡入/淡出
+        if (inType === 'fade') ctx.globalAlpha *= inProgress;
+        if (outType === 'fade') ctx.globalAlpha *= outProgress;
+
+        // 弹出
+        if (inType === 'pop' || outType === 'pop') {
+            let popScale = 1;
+            if (inType === 'pop') popScale = Math.min(popScale, ReelsAnimEngine.computePopScale(inProgress));
+            if (outType === 'pop') popScale = Math.min(popScale, ReelsAnimEngine.computePopScale(outProgress));
+            if (popScale < 0.999) {
+                ctx.translate(x + w / 2, y + h / 2);
+                ctx.scale(popScale, popScale);
+                ctx.translate(-(x + w / 2), -(y + h / 2));
+            }
+        }
+
+        // 滑入/滑出
+        const slideDistance = Math.max(w, h) * 0.5;
+        if (inType.startsWith('slide_') && inProgress < 1) {
+            const ease = 1 - inProgress;
+            if (inType === 'slide_up') ctx.translate(0, slideDistance * ease);
+            else if (inType === 'slide_down') ctx.translate(0, -slideDistance * ease);
+            else if (inType === 'slide_left') ctx.translate(slideDistance * ease, 0);
+            else if (inType === 'slide_right') ctx.translate(-slideDistance * ease, 0);
+        }
+        if (outType.startsWith('slide_') && outProgress < 1) {
+            const ease = 1 - outProgress;
+            if (outType === 'slide_up') ctx.translate(0, -slideDistance * ease);
+            else if (outType === 'slide_down') ctx.translate(0, slideDistance * ease);
+        }
+    }
 
     if (ov.type === 'image') {
         _drawImageOverlay(ctx, ov, x, y, w, h);
@@ -752,7 +832,8 @@ function _drawVideoOverlay(ctx, ov, x, y, w, h, currentTime) {
     
     // 相对本覆层的播放时间
     const start = parseFloat(ov.start || 0);
-    let relTime = Math.max(0, currentTime - start);
+    const videoOffset = parseFloat(ov.video_start_offset || 0);
+    let relTime = Math.max(0, currentTime - start) + videoOffset;
 
     let drawable = null;
     const isGif = videoPath ? videoPath.toLowerCase().endsWith('.gif') : false;
@@ -810,14 +891,30 @@ function _drawVideoOverlay(ctx, ov, x, y, w, h, currentTime) {
             const vid = _getCachedVideo(videoPath);
             if (vid && vid.readyState >= 2) {
                 drawable = vid;
-                let targetTime = relTime;
                 const d = vid.duration || 1;
-                if (targetTime >= d) targetTime = targetTime % d;
-                if (Math.abs(vid.currentTime - targetTime) > 0.2) {
-                    vid.currentTime = targetTime;
-                }
-                if (vid.paused && document.visibilityState === 'visible') {
-                    vid.play().catch(e => {}); 
+                let targetTime = relTime % d;
+
+                // 检测主时间轴是否在推进（预览是否正在播放）
+                const prevTime = ov._lastPreviewTime || 0;
+                const timeAdvancing = Math.abs(currentTime - (ov._lastMasterTime || 0)) > 0.001;
+                ov._lastMasterTime = currentTime;
+                ov._lastPreviewTime = relTime;
+
+                if (!timeAdvancing) {
+                    // 预览暂停中 → 暂停覆层视频，seek 到目标帧
+                    if (!vid.paused) vid.pause();
+                    if (Math.abs(vid.currentTime - targetTime) > 0.05) {
+                        vid.currentTime = targetTime;
+                    }
+                } else {
+                    // 预览播放中 → 让视频自由播放，仅在大跳转时 seek
+                    if (vid.paused && document.visibilityState === 'visible') {
+                        vid.currentTime = targetTime;
+                        vid.play().catch(e => {});
+                    } else if (Math.abs(vid.currentTime - targetTime) > 0.5) {
+                        // 大的时间跳转（用户拖动进度条等）
+                        vid.currentTime = targetTime;
+                    }
                 }
             }
         }
@@ -893,38 +990,7 @@ function _drawTextOverlay(ctx, ov, x, y, w, h, currentTime) {
     const lines = _wrapText(ctx, content, boxW);
     const lineHeight = fontSize * 1.3 + lineSpacing;
 
-    // 入/出场动画
-    let animOpFactor = 1;
-    const inType = ov.anim_in_type || 'none';
-    const outType = ov.anim_out_type || 'none';
-    const start = parseFloat(ov.start || 0);
-    const end = parseFloat(ov.end || 0);
-
-    if (window.ReelsAnimEngine && (inType !== 'none' || outType !== 'none')) {
-        const inDur = inType !== 'none' ? parseFloat(ov.anim_in_duration || 0.3) : 0;
-        const outDur = outType !== 'none' ? parseFloat(ov.anim_out_duration || 0.3) : 0;
-        const { inProgress, outProgress } = ReelsAnimEngine.computeAnimProgress(
-            currentTime, start, end, inDur, outDur
-        );
-
-        // Fade
-        if (inType === 'fade') animOpFactor *= inProgress;
-        if (outType === 'fade') animOpFactor *= outProgress;
-
-        // Pop
-        if (inType === 'pop' || outType === 'pop') {
-            let popScale = 1;
-            if (inType === 'pop') popScale = Math.min(popScale, ReelsAnimEngine.computePopScale(inProgress));
-            if (outType === 'pop') popScale = Math.min(popScale, ReelsAnimEngine.computePopScale(outProgress));
-            if (popScale < 0.999) {
-                ctx.translate(x + w / 2, y + h / 2);
-                ctx.scale(popScale, popScale);
-                ctx.translate(-(x + w / 2), -(y + h / 2));
-            }
-        }
-    }
-
-    ctx.globalAlpha *= animOpFactor;
+    // 入/出场动画已由 drawOverlay() 统一处理，此处不再重复
 
     // ── 背景框 ──
     if (ov.bg_enabled) {
@@ -2071,10 +2137,15 @@ function _drawScrollOverlay(ctx, ov, clipX, clipY, clipW, clipH, currentTime, ca
                 const offY = curY - bodyClipY;
                 _drawScrollTextBlock(tc, ovProxy, lines, offX, offY, textW, lineHeight, fontSize, align);
 
-                // 渐变遮罩 (只下羽化，顶部紧贴标题)
+                // 渐变遮罩：固定标题只作用于正文裁切区，标题本身不参与羽化。
                 tc.globalCompositeOperation = 'destination-in';
                 const grad = tc.createLinearGradient(0, 0, 0, cH);
-                grad.addColorStop(0, 'rgba(0,0,0,1)');
+                if (featherTop > 0) {
+                    grad.addColorStop(0, 'rgba(0,0,0,0)');
+                    grad.addColorStop(Math.min(featherTop / cH, 0.49), 'rgba(0,0,0,1)');
+                } else {
+                    grad.addColorStop(0, 'rgba(0,0,0,1)');
+                }
                 if (featherBottom > 0) {
                     grad.addColorStop(Math.max(1 - featherBottom / cH, 0.51), 'rgba(0,0,0,1)');
                     grad.addColorStop(1, 'rgba(0,0,0,0)');

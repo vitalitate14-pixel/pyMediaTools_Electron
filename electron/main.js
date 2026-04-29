@@ -12,6 +12,7 @@ let mainWindow;
 let appIsReady = false;
 let powerSaveId = null;
 let isQuitting = false;
+const templateWindows = new Map(); // templateId → BrowserWindow
 
 // local-media 用于渲染本地生成的预览图/媒体。必须在 app.ready 前声明权限，
 // 否则 video/img 的 range/fetch 行为在部分 Electron 版本里会不稳定。
@@ -312,6 +313,46 @@ app.whenReady().then(async () => {
             console.error('scan-directory error:', e);
             return [];
         }
+    });
+
+    // IPC: 递归搜索指定文件名（查找素材功能）
+    ipcMain.handle('search-files-recursive', async (event, searchDir, fileNames, maxDepth = 5) => {
+        const result = new Map();
+        const targetSet = new Set(fileNames.map(n => n.toLowerCase()));
+
+        function walk(dir, depth) {
+            if (depth > maxDepth) return;
+            let entries;
+            try { entries = fs.readdirSync(dir, { withFileTypes: true }); } catch (_) { return; }
+            for (const entry of entries) {
+                if (entry.name.startsWith('.')) continue;
+                const fullPath = path.join(dir, entry.name);
+                if (entry.isFile()) {
+                    const lower = entry.name.toLowerCase();
+                    if (targetSet.has(lower) && !result.has(lower)) {
+                        result.set(lower, fullPath);
+                        if (result.size >= targetSet.size) return;
+                    }
+                } else if (entry.isDirectory()) {
+                    walk(fullPath, depth + 1);
+                    if (result.size >= targetSet.size) return;
+                }
+            }
+        }
+
+        walk(searchDir, 0);
+        const obj = {};
+        for (const [k, v] of result) obj[k] = v;
+        return obj;
+    });
+
+    // IPC: 批量检查文件是否存在
+    ipcMain.handle('check-files-exist', async (event, filePaths) => {
+        const results = {};
+        for (const p of filePaths) {
+            try { results[p] = fs.existsSync(p); } catch (_) { results[p] = false; }
+        }
+        return results;
     });
 
     ipcMain.handle('get-downloads-path', async () => {
@@ -752,6 +793,59 @@ app.whenReady().then(async () => {
     // 注册 API 路由（替代 Python Flask 后端）
     registerAPIHandlers();
     log('API handlers registered - no Python backend needed');
+
+    // ==================== 模板多窗口支持 ====================
+    ipcMain.handle('open-template-window', (event, templateId, templateName) => {
+        // 如果已有该模板的窗口，聚焦它
+        if (templateWindows.has(templateId)) {
+            const existingWin = templateWindows.get(templateId);
+            if (!existingWin.isDestroyed()) {
+                existingWin.focus();
+                return { success: true, reused: true };
+            }
+            templateWindows.delete(templateId);
+        }
+
+        const winOpts = {
+            width: 1200,
+            height: 800,
+            minWidth: 900,
+            minHeight: 700,
+            title: `模板: ${templateName || templateId}`,
+            webPreferences: {
+                nodeIntegration: false,
+                contextIsolation: true,
+                sandbox: false,
+                webSecurity: false,
+                preload: path.join(__dirname, 'preload.js'),
+            },
+        };
+
+        if (process.platform === 'darwin') {
+            winOpts.titleBarStyle = 'hiddenInset';
+            winOpts.trafficLightPosition = { x: 15, y: 15 };
+        }
+
+        const win = new BrowserWindow(winOpts);
+
+        // 通过 URL hash 传递模板 ID，前端启动时读取
+        if (!app.isPackaged) {
+            win.loadURL(`http://localhost:5173/#template=${templateId}`);
+            win.webContents.openDevTools();
+        } else {
+            win.loadFile(path.join(__dirname, '../dist/index.html'), {
+                hash: `template=${templateId}`,
+            });
+        }
+
+        templateWindows.set(templateId, win);
+        win.on('closed', () => {
+            templateWindows.delete(templateId);
+        });
+
+        log(`[Template] 打开模板窗口: ${templateName} (${templateId})`);
+        return { success: true, reused: false };
+    });
 
     // 防止 macOS App Nap
     if (process.platform === 'darwin') {

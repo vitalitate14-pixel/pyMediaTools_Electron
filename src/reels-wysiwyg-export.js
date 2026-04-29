@@ -268,6 +268,11 @@ async function reelsWysiwygExport(params) {
         }));
     }
 
+    // ── 检测覆层是否使用了非默认混合模式（screen/multiply 等需要背景像素才能生效）──
+    const _hasBlendOverlay = (taskOverlays || []).some(ov =>
+        !ov.disabled && ov.blend_mode && ov.blend_mode !== 'source-over'
+    );
+
     // ── 智能补偿：如果处于单视频且开启了循环渐变，但实际合成短于视频本身，抢回极速模式！ ──
     if (loopFade && backgroundPath && !_isImageFile(backgroundPath) && !isMultiClip) {
         let _probedBg = await window.electronAPI.getMediaDuration(backgroundPath);
@@ -276,11 +281,18 @@ async function reelsWysiwygExport(params) {
             log(`🎯 [智能提速] 合成时长(${duration.toFixed(2)}s)无需底板(${_probedBg.toFixed(2)}s)循环！强制关闭渐变，唤醒极速贴合 ⚡️！`);
             loopFade = false; 
             // 只要不是多视频，就可以霸王硬上弓恢复极速直通路径！
-            if (params.alphaOverlayBgPath === null) {
+            // ⚠️ 但如果有覆层使用了 blend mode，则不能走 alpha overlay（FFmpeg overlay 不支持 CSS 混合模式）
+            if (params.alphaOverlayBgPath === null && !_hasBlendOverlay) {
                 const uiFastAlpha = (document.getElementById('reels-fast-alpha-mode') || {}).checked !== false;
                 if (uiFastAlpha) params.alphaOverlayBgPath = backgroundPath; 
             }
         }
+    }
+
+    // ── 即使外部已设置 alphaOverlayBgPath，如果有 blend mode 覆层也必须降级 ──
+    if (_hasBlendOverlay && params.alphaOverlayBgPath) {
+        log('⚠️ 检测到覆层使用混合模式，禁用 Alpha Overlay 快速通道（需逐帧 Canvas 合成以支持 blend mode）');
+        params.alphaOverlayBgPath = null;
     }
 
     // 注意：OfflineAudioContext 在 Electron contextIsolation:true 下会崩溃
@@ -332,7 +344,7 @@ async function reelsWysiwygExport(params) {
         log(`阶段1.5: 预处理 ${videoOverlays.length} 个视频/动图覆层...`);
         for (const ov of videoOverlays) {
             if (!ov.content) continue;
-            const opath = ov.content.startsWith('file://') ? ov.content.substring(7) : ov.content;
+            const opath = ov.content.startsWith('file://') ? decodeURIComponent(ov.content.substring(7)) : ov.content;
             const oPrep = await window.electronAPI.reelsComposeWysiwyg('prepare-overlay', {
                 overlayPath: opath,
                 fps,
@@ -350,7 +362,7 @@ async function reelsWysiwygExport(params) {
     let cvIsImageSequence = false;
     if (contentVideoPath) {
         log(`阶段1.5: 预处理内容视频源 (${contentVideoPath})...`);
-        const cvPathRaw = contentVideoPath.startsWith('file://') ? contentVideoPath.substring(7) : contentVideoPath;
+        const cvPathRaw = contentVideoPath.startsWith('file://') ? decodeURIComponent(contentVideoPath.substring(7)) : contentVideoPath;
 
         // 检测是否为图片序列文件夹
         let isDir = false;
